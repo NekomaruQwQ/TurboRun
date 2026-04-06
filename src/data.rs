@@ -51,37 +51,43 @@ pub struct Task {
 
     /// The last time this task was modified by the user, in milliseconds since
     /// the Unix epoch.
-    pub last_modified: u64,
+    pub last_modified: SystemTime,
+}
+
+impl Task {
+    pub fn example() -> Self {
+        Self {
+            id: TaskId(0),
+            name: "Example Task".into(),
+            command: "print \"Hello, TurboRun!\"".into(),
+            plugins: vec![
+                PluginInstance::new("timed")
+                    .var("unit", "ms")
+            ],
+            last_modified: SystemTime::now(),
+        }
+    }
 }
 
 /// Represents a plugin that can be applied to a task's command to modify its
 /// behavior.
 #[derive(Debug, Clone)]
 pub struct Plugin {
-    /// The unique identifier of this plugin, which is the relative path from
-    /// the plugins directory without extension.
-    pub id: String,
-    /// The metadata of this plugin, loaded from the plugin's metadata file
-    /// (.meta.toml).
-    pub metadata: PluginMetadata,
-    /// The precalculated path to the metadata file of this plugin for reloading.
-    pub metadata_path: PathBuf,
-    /// The source code of this plugin, loaded from the plugin's source file.
+    /// The name of this plugin, uniquely identifying it among all plugins.
+    ///
+    /// For external plugins loaded from disk, this is derived from the relative
+    /// path of the plugin's source file from the plugins directory without
+    /// extension.
+    pub name: String,
+    /// The full path to the plugin file, or [`None`] for built-in plugins.
+    pub path: Option<PathBuf>,
+    /// The source code of this plugin.
     pub source: String,
-    /// The precalculated path to the source file of this plugin for reloading.
-    pub source_path: PathBuf,
-    /// The last modified time of this plugin in milliseconds since the Unix epoch
-    /// used for change detection and reloading.
-    pub last_modified: u64,
-}
-
-/// Represents a metadata file for a plugin.
-#[derive(Debug, Clone)]
-#[derive(Default)]
-#[derive(Deserialize, Serialize)]
-pub struct PluginMetadata {
-    pub name: Option<String>,
-    pub description: Option<String>,
+    /// The last modified time of this plugin in milliseconds since the Unix
+    /// epoch.
+    ///
+    /// For built-in plugins, this field is always zero.
+    pub last_modified: SystemTime,
 }
 
 /// Represents a specific instance of a plugin applied to a task, including
@@ -89,6 +95,17 @@ pub struct PluginMetadata {
 #[derive(Debug, Clone)]
 #[derive(Deserialize, Serialize)]
 pub struct PluginInstance {
-    pub id: String,
-    pub variables: HashMap<String, String>,
+    pub name: String,
+    pub vars: HashMap<String, String>,
+}
+
+impl PluginInstance {
+    pub fn new(name: &str) -> Self {
+        Self { name: name.into(), vars: HashMap::new() }
+    }
+
+    pub fn var(mut self, name: &str, value: &str) -> Self {
+        self.vars.insert(name.into(), value.into());
+        self
+    }
 }

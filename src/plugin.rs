@@ -50,8 +50,6 @@ fn scan_plugins_from_dir_entry(
             load_plugin_from_file(plugin_dir, &path)?
                 .pipe(|plugin| vec![plugin])
                 .pipe(Ok)
-        } else if file_name.ends_with(".meta.toml") {
-            Ok(Vec::new())
         } else {
             log::warn!("skipping non-plugin file at {path_display}");
             Ok(Vec::new())
@@ -66,57 +64,31 @@ fn scan_plugins_from_dir_entry(
     clippy::missing_assert_message,
     clippy::panic_in_result_fn,
     reason = "precondition check")]
-pub fn load_plugin_from_file(plugin_dir: &Path, source_path: &Path)
+pub fn load_plugin_from_file(base: &Path, path: &Path)
  -> anyhow::Result<Plugin> {
-    assert!(source_path.starts_with(plugin_dir));
-    assert!(source_path.is_file());
-    assert!(source_path.extension().unwrap_or_default() == "nu");
+    assert!(path.starts_with(base));
+    assert!(path.is_file());
+    assert!(path.extension().unwrap_or_default() == "nu");
 
-    let metadata_path =
-        source_path.with_extension("meta.toml");
-    let source =
-        fs::read_to_string(source_path)
-            .context("fs::read_to_string failed")?;
-    let source_last_modified =
-        fs::metadata(source_path)
-            .and_then(|metadata| metadata.modified())
-            .context("fs::metadata failed")?;
-    let metadata =
-        fs::read_to_string(&metadata_path)
-            .pipe(none_if_not_found)
-            .context("fs::read_to_string failed")?
-            .map(|content| toml::from_str(&content))
-            .transpose()
-            .context("toml::from_str failed")?
-            .unwrap_or_default();
-    let metadata_last_modified =
-        fs::metadata(&metadata_path)
-            .pipe(none_if_not_found)
-            .context("fs::metadata failed")?
-            .map(|metadata| metadata.modified())
-            .transpose()
-            .context("fs::metadata failed")?
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-    let last_modified =
-        SystemTime::max(
-            source_last_modified,
-            metadata_last_modified)
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .context("SystemTime::duration_since failed")?
-            .as_millis() as u64;
-    let plugin_id =
-        source_path
-            .strip_prefix(plugin_dir)
+    let name =
+        path
+            .strip_prefix(base)
             .context("Path::strip_prefix failed")?
             .with_extension("")
             .to_string_lossy()
             .replace('\\', "/");
+    let source =
+        fs::read_to_string(path)
+            .context("fs::read_to_string failed")?;
+    let last_modified =
+        fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .context("fs::metadata failed")?;
+    log::info!("loaded plugin {name}");
     Ok(Plugin {
-        id: plugin_id,
-        metadata,
-        metadata_path,
+        name,
         source,
-        source_path: source_path.to_owned(),
+        path: Some(path.to_owned()),
         last_modified,
     })
 }
@@ -131,15 +103,15 @@ pub fn apply_plugins(
     for inst in plugin_vec {
         let mut plugin =
             plugin_map
-                .get(&inst.id)
-                .with_context(|| format!("plugin not found: {}", inst.id))?
+                .get(&inst.name)
+                .with_context(|| format!("plugin not found: {}", inst.name))?
                 .source
                 .clone();
-        for (key, value) in &inst.variables {
+        for (key, value) in &inst.vars {
             plugin = plugin.replace(&["{{", key, "}}"].concat(), value);
         }
 
-        out = plugin.replace("{{COMMAND}}", &out);
+        out = plugin.replace("{{command}}", &out);
     }
     Ok(out)
 }

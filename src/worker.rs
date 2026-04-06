@@ -84,7 +84,7 @@ impl TaskWorker {
         }
 
         for inst in &self.task.plugins {
-            if !plugins.contains_key(&inst.id) {
+            if !plugins.contains_key(&inst.name) {
                 return false;
             }
         }
@@ -148,15 +148,16 @@ impl TaskProcess {
     }
 
     fn update(proc: &mut Option<Self>) -> Option<TaskResult> {
-        let inner = proc.as_mut()?;
+        let proc_mut = proc;
+        let proc = proc_mut.as_mut()?;
 
         // Drain channels every tick for live output streaming.
-        inner.stdout_reader.read_into(&mut inner.stdout);
-        inner.stderr_reader.read_into(&mut inner.stderr);
+        proc.stdout_reader.read_into(&mut proc.stdout);
+        proc.stderr_reader.read_into(&mut proc.stderr);
 
-        match inner.child.try_wait() {
+        match proc.child.try_wait() {
             Ok(Some(status)) => {
-                let mut proc = proc.take().unwrap();
+                let mut proc = proc_mut.take().unwrap();
 
                 // Join threads (guarantees all lines are sent), then drain
                 // any remaining lines that arrived after the last read_into.

@@ -128,7 +128,7 @@ Behavioral differences live in the nu plugins that wrap the command.
 A task definition is minimal:
 
 - **name** — display name
-- **command** — the nu command to run (fills the `{{COMMAND}}` blank)
+- **command** — the nu command to run (fills the `{{command}}` blank)
 - **plugins** — ordered list of plugin names to compose around the command
 - **plugin_params** — values for each plugin's template blanks
 - **last_modified** — milliseconds since Unix epoch, for change detection
@@ -153,7 +153,7 @@ The `{{xxx}}` syntax was chosen because double braces have no meaning in nu
 (single braces are used for blocks, records, closures, and string interpolation),
 it is a universally recognized convention (Mustache, Handlebars, Jinja2, Tera,
 Just), and unfilled blanks cause nu's parser to reject the script before
-execution — providing free validation. The reserved placeholder `{{COMMAND}}`
+execution — providing free validation. The reserved placeholder `{{command}}`
 is used for composing the inner command into each plugin layer.
 
 ### Example plugins
@@ -161,33 +161,33 @@ is used for composing the inner command into each plugin layer.
 **retry.nu** — periodic retry with configurable interval:
 ```nu
 loop {
-  {{COMMAND}}
+  {{command}}
   sleep {{interval}}
 }
 ```
 
 **healthcheck.nu** — run command then verify health:
 ```nu
-{{COMMAND}}
+{{command}}
 if not ({{check}}) { exit 1 }
 ```
 
 **env.nu** — inject environment variables:
 ```nu
 with-env { {{env_block}} } {
-  {{COMMAND}}
+  {{command}}
 }
 ```
 
 **pwsh.nu** — delegate to PowerShell (must be innermost plugin):
 ```nu
-^pwsh -C "{{COMMAND}}"
+^pwsh -C "{{command}}"
 ```
 
 ### Composition
 
 Plugins compose by nesting. The engine walks the plugin list inside-out,
-substituting `{{COMMAND}}` at each layer. The first plugin in the list is the
+substituting `{{command}}` at each layer. The first plugin in the list is the
 innermost wrapper around the command, and the last is the outermost.
 
 For a task with plugins `[env, retry]` and command `my-server`:
@@ -244,7 +244,7 @@ This is the architectural story that makes TurboRun interesting.
 
 Even shell selection is a plugin, not an engine concern. A `pwsh.nu` plugin:
 ```nu
-^pwsh -C "{{COMMAND}}"
+^pwsh -C "{{command}}"
 ```
 
 Applied as the innermost plugin (first in the list), this wraps the raw command

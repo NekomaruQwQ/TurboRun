@@ -598,6 +598,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_flex"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40530bc9a699c04ad642aba993660ba71980a93e691e588f90df57a20c01341b"
+dependencies = [
+ "egui",
+]
+
+[[package]]
 name = "egui_glow"
 version = "0.34.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2383,6 +2392,7 @@ dependencies = [
  "clap",
  "eframe",
  "egui",
+ "egui_flex",
  "euclid",
  "fastrand",
  "itertools",
