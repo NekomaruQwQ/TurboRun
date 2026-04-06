@@ -98,6 +98,36 @@ impl TaskWorker {
         }
     }
 
+    /// Kills the running process, if any.
+    /// The result (with `exit_code: None`) is collected on the next `update()`.
+    pub fn stop(&mut self) {
+        if let Some(proc) = &mut self.proc {
+            let _ = proc.child.kill();
+        }
+    }
+
+    /// Returns the current stdout lines.
+    ///
+    /// While running, returns the live buffer from the active process.
+    /// When stopped, returns the captured lines from the last result.
+    /// Returns `&[]` if the task has never been run.
+    pub fn stdout(&self) -> &[String] {
+        if let Some(proc) = &self.proc {
+            &proc.stdout
+        } else {
+            self.last_result.as_ref().map_or(&[], |r| &r.stdout)
+        }
+    }
+
+    /// Returns the current stderr lines (same semantics as `stdout()`).
+    pub fn stderr(&self) -> &[String] {
+        if let Some(proc) = &self.proc {
+            &proc.stderr
+        } else {
+            self.last_result.as_ref().map_or(&[], |r| &r.stderr)
+        }
+    }
+
     pub fn run(&mut self, plugins: &HashMap<String, Plugin>) -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");

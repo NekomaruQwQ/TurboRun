@@ -60,6 +60,15 @@ impl TaskEngine {
         &mut self.tasks
     }
 
+    pub fn create_task(&self) -> Task {
+        loop {
+            let task = Task::empty();
+            if !self.tasks.keys().contains(&task.id) {
+                break task;
+            }
+        }
+    }
+
     pub fn load_config(&mut self) -> anyhow::Result<()> {
         if self.tasks.values().any(TaskWorker::is_running) {
             anyhow::bail!("cannot load config while tasks are running");
@@ -107,5 +116,35 @@ impl TaskEngine {
                 .map(|plugin| (plugin.name.clone(), plugin))
                 .collect();
         Ok(())
+    }
+
+    /// Returns the worker for a task by ID.
+    pub fn task(&self, task_id: TaskId) -> Option<&TaskWorker> {
+        self.tasks.get(&task_id)
+    }
+
+    /// Polls all workers: drains output channels and collects exit status.
+    /// Call once per frame.
+    pub fn update(&mut self) {
+        for worker in self.tasks.values_mut() {
+            worker.update();
+        }
+    }
+
+    /// Starts the given task.
+    ///
+    /// Panics if `task_id` is not found — callers must pass a valid ID.
+    pub fn run_task(&mut self, task_id: TaskId) -> anyhow::Result<()> {
+        self.tasks
+            .get_mut(&task_id)
+            .expect("task_id must be valid")
+            .run(&self.plugins)
+    }
+
+    /// Stops the given task if it is running.
+    pub fn stop_task(&mut self, task_id: TaskId) {
+        if let Some(worker) = self.tasks.get_mut(&task_id) {
+            worker.stop();
+        }
     }
 }

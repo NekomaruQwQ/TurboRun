@@ -1,10 +1,11 @@
 use egui::*;
 
 use crate::engine::TaskEngine;
+use crate::icon;
 
 pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) {
     ui
-        .button("Reload Plugins")
+        .button(format!("{}  Reload Plugins", icon::REFRESH))
         .clicked()
         .then(|| {
             engine
@@ -16,11 +17,14 @@ pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) {
                 });
         });
 
-    ui.separator();
+    ui.add_space(10.0);
 
     ScrollArea::vertical().show(ui, |ui| {
         for plugin in engine.plugins_sorted() {
-            let header = RichText::new(&plugin.name).monospace();
+            let header = RichText::new(format!(
+                "{}  {}",
+                icon::PUZZLE_PIECE,
+                plugin.name)).monospace();
             let source =
                 RichText::new(plugin.source.trim_end())
                 .monospace()

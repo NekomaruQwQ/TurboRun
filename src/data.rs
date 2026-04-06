@@ -17,14 +17,14 @@ use serde::*;
 /// the config file minimal.
 /// The corresponding `#[serde(default)]` on each field ensures that missing
 /// sections are filled in on load.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Default)]
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<Task>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct Task {
     /// The stable ID of this task.
@@ -55,23 +55,32 @@ pub struct Task {
 }
 
 impl Task {
+    pub fn empty() -> Self {
+        Self {
+            id: TaskId::random(),
+            name: String::new(),
+            command: String::new(),
+            plugins: Vec::new(),
+            last_modified: SystemTime::now(),
+        }
+    }
+
     pub fn example() -> Self {
         Self {
-            id: TaskId(0),
             name: "Example Task".into(),
             command: "print \"Hello, TurboRun!\"".into(),
             plugins: vec![
                 PluginInstance::new("timed")
                     .var("unit", "ms")
             ],
-            last_modified: SystemTime::now(),
+            ..Self::empty()
         }
     }
 }
 
 /// Represents a plugin that can be applied to a task's command to modify its
 /// behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Plugin {
     /// The name of this plugin, uniquely identifying it among all plugins.
     ///
@@ -92,20 +101,20 @@ pub struct Plugin {
 
 /// Represents a specific instance of a plugin applied to a task, including
 /// the variables to be substituted into the plugin's source code when applied.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct PluginInstance {
     pub name: String,
-    pub vars: HashMap<String, String>,
+    pub vars: Vec<(String, String)>,
 }
 
 impl PluginInstance {
     pub fn new(name: &str) -> Self {
-        Self { name: name.into(), vars: HashMap::new() }
+        Self { name: name.into(), vars: Vec::new() }
     }
 
     pub fn var(mut self, name: &str, value: &str) -> Self {
-        self.vars.insert(name.into(), value.into());
+        self.vars.push((name.into(), value.into()));
         self
     }
 }

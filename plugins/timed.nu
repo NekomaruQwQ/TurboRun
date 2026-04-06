@@ -2,7 +2,9 @@
 #[var("unit")]
 
 let __start = date now
-do {{{command}}}
+do {
+{{command}}
+}
 let __end = date now
 let __elapsed = $__end - $__start
 let __unit = "{{unit}}"
