@@ -128,15 +128,17 @@ Behavioral differences live in the nu plugins that wrap the command.
 A task definition is minimal:
 
 - **name** — display name
-- **command** — the nu command to run (fills the `{{inner}}` blank)
+- **command** — the nu command to run (fills the `{{COMMAND}}` blank)
 - **plugins** — ordered list of plugin names to compose around the command
 - **plugin_params** — values for each plugin's template blanks
-- **working_directory** — optional, passed to `Command::new()`
-- **enabled** — whether the task is active
+- **last_modified** — milliseconds since Unix epoch, for change detection
+- **last_reviewed** — milliseconds since Unix epoch; user must review the
+  fully composed script before execution after any change
 
 No `auto_restart`. No `interval`. No `env_vars`. No `pre_command`. No `shell`.
-These are all plugin concerns, not engine concerns. The task struct does not accumulate
-optional feature flags because the plugin system makes them unnecessary.
+No `working_directory`. No `enabled`. These are all plugin concerns or future
+additions, not engine concerns. The task struct does not accumulate optional
+feature flags because the plugin system makes them unnecessary.
 
 ## Plugin System
 
@@ -151,45 +153,48 @@ The `{{xxx}}` syntax was chosen because double braces have no meaning in nu
 (single braces are used for blocks, records, closures, and string interpolation),
 it is a universally recognized convention (Mustache, Handlebars, Jinja2, Tera,
 Just), and unfilled blanks cause nu's parser to reject the script before
-execution — providing free validation.
+execution — providing free validation. The reserved placeholder `{{COMMAND}}`
+is used for composing the inner command into each plugin layer.
 
 ### Example plugins
 
 **retry.nu** — periodic retry with configurable interval:
 ```nu
 loop {
-  {{inner}}
+  {{COMMAND}}
   sleep {{interval}}
 }
 ```
 
 **healthcheck.nu** — run command then verify health:
 ```nu
-{{inner}}
+{{COMMAND}}
 if not ({{check}}) { exit 1 }
 ```
 
 **env.nu** — inject environment variables:
 ```nu
 with-env { {{env_block}} } {
-  {{inner}}
+  {{COMMAND}}
 }
 ```
 
 **pwsh.nu** — delegate to PowerShell (must be innermost plugin):
 ```nu
-^pwsh -C "{{inner}}"
+^pwsh -C "{{COMMAND}}"
 ```
 
 ### Composition
 
-Plugins compose by nesting. The engine walks the plugin list outside-in,
-substituting `{{inner}}` at each layer. For a task with plugins `[retry, env]`
-and command `my-server`:
+Plugins compose by nesting. The engine walks the plugin list inside-out,
+substituting `{{COMMAND}}` at each layer. The first plugin in the list is the
+innermost wrapper around the command, and the last is the outermost.
+
+For a task with plugins `[env, retry]` and command `my-server`:
 
 1. Start with: `my-server`
-2. Apply `env`: `with-env { PORT: "3000" } { my-server }`
-3. Apply `retry`: `loop { with-env { PORT: "3000" } { my-server }; sleep 5sec }`
+2. Apply `env` (innermost): `with-env { PORT: "3000" } { my-server }`
+3. Apply `retry` (outermost): `loop { with-env { PORT: "3000" } { my-server }; sleep 5sec }`
 
 The outermost result is what gets passed to `nu -c`.
 
@@ -239,14 +244,14 @@ This is the architectural story that makes TurboRun interesting.
 
 Even shell selection is a plugin, not an engine concern. A `pwsh.nu` plugin:
 ```nu
-^pwsh -C "{{inner}}"
+^pwsh -C "{{COMMAND}}"
 ```
 
-Applied as the innermost plugin, this wraps the raw command in a PowerShell
-invocation — but nu remains the universal launcher. The engine always calls
-`nu -c` on the final composed script. There is no `shell` field on the task
-struct, no branching in the engine. Non-nu commands are just nu invoking an
-external shell via the `^` operator.
+Applied as the innermost plugin (first in the list), this wraps the raw command
+in a PowerShell invocation — but nu remains the universal launcher. The engine
+always calls `nu -c` on the final composed script. There is no `shell` field on
+the task struct, no branching in the engine. Non-nu commands are just nu invoking
+an external shell via the `^` operator.
 
 This means TurboRun degrades gracefully for non-nu users: they get raw command
 execution through a shell plugin, without template composition from the broader
@@ -304,11 +309,10 @@ primary interaction for creating and editing tasks is the window, not a text
 editor. The config should be human-readable (for debugging) but need not be
 optimized for human authoring.
 
-JSON is the default choice. The data model is simple (flat list of tasks with a
-few fields each), JSON round-trips trivially with serde, and it imposes no
-constraints on struct design. TOML was used in the MVP but led to contorting
-data structures for serialization aesthetics — the config format was designing
-the app.
+TOML is the default choice. The data model is simple (flat list of tasks with a
+few fields each), TOML round-trips trivially with serde, it is human-readable
+for debugging, and it is already used for plugin metadata (`.meta.toml`
+sidecars), keeping the tooling unified on a single format.
 
 ### Don't let serialization drive the data model
 
