@@ -5,37 +5,45 @@ use std::path::Path;
 use anyhow::Context as _;
 use tap::prelude::*;
 
-use crate::core::*;
+use crate::util::*;
+use crate::data::*;
 use crate::plugin::*;
 use crate::worker::*;
 
 pub struct TaskEngine {
     plugins: HashMap<String, Plugin>,
-    tasks: Vec<TaskWorker>,
+    tasks: HashMap<TaskId, TaskWorker>,
 }
 
 impl TaskEngine {
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),
-            tasks: Vec::new(),
+            tasks: HashMap::new(),
         }
     }
 
+    pub const fn tasks_mut(&mut self) -> &mut HashMap<TaskId, TaskWorker> {
+        &mut self.tasks
+    }
+
     pub fn load_config(&mut self, config_path: &Path) -> anyhow::Result<()> {
-        if self.tasks.iter().any(TaskWorker::is_running) {
+        if self.tasks.values().any(TaskWorker::is_running) {
             anyhow::bail!("cannot load config while tasks are running");
         }
 
         let config =
             std::fs::read_to_string(config_path)
+                .pipe(none_if_not_found)
                 .context("fs::read_to_string failed")?
-                .pipe(|toml| toml::from_str::<Config>(&toml))
-                .context("toml::from_str failed")?;
+                .map(|toml| toml::from_str::<Config>(&toml))
+                .transpose()
+                .context("toml::from_str failed")?
+                .unwrap_or_default();
         self.tasks =
             config.tasks
                 .into_iter()
-                .map(TaskWorker::new)
+                .map(|task| (task.id, TaskWorker::new(task)))
                 .collect();
         Ok(())
     }
@@ -43,7 +51,7 @@ impl TaskEngine {
     pub fn save_config(&self, config_path: &Path) -> anyhow::Result<()> {
         let tasks =
             self.tasks
-                .iter()
+                .values()
                 .map(|worker| worker.task().clone())
                 .collect();
         let config = Config {

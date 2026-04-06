@@ -1,6 +1,9 @@
 //! Core data structures for TurboRun, shared among the persistance layer,
 //! the task execution engine and the UI.
 
+mod task_id;
+pub use task_id::TaskId;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -24,6 +27,12 @@ pub struct Config {
 #[derive(Debug, Clone)]
 #[derive(Deserialize, Serialize)]
 pub struct Task {
+    /// The stable ID of this task.
+    ///
+    /// The ID is generated randomly when a new task is created, and should be
+    /// stable across renames and other changes to the task.
+    pub id: TaskId,
+
     /// The name of this task, e.g. "Print Hello".
     pub name: String,
 
@@ -43,14 +52,6 @@ pub struct Task {
     /// The last time this task was modified by the user, in milliseconds since
     /// the Unix epoch.
     pub last_modified: u64,
-
-    /// The last time this task was reviewed by the user, in milliseconds since
-    /// the Unix epoch, or zero if the task has not been reviewed yet.
-    ///
-    /// The fully composed Nushell script for each task must be explicitly confirmed
-    /// by the user before the task can be executed after any change to the either
-    /// the task or any of the plugins it uses.
-    pub last_reviewed: u64,
 }
 
 /// Represents a plugin that can be applied to a task's command to modify its

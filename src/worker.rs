@@ -4,12 +4,21 @@ use std::io;
 use std::process::*;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Context as _;
 
-use crate::core::*;
+use crate::data::*;
 use crate::plugin::*;
+
+pub enum TaskStatus<'a> {
+    Invalid,
+    Stopped,
+    Running,
+    Success(&'a TaskResult),
+    Failure(&'a TaskResult),
+}
 
 pub struct TaskWorker {
     /// The task to be executed by this worker.
@@ -19,6 +28,13 @@ pub struct TaskWorker {
     proc: Option<TaskProcess>,
     /// The result of the last run, or `None` if the task has not been run yet.
     last_result: Option<TaskResult>,
+}
+
+pub struct TaskResult {
+    pub elapsed: Duration,
+    pub exit_code: Option<i32>,
+    pub stdout: Vec<String>,
+    pub stderr: Vec<String>,
 }
 
 impl TaskWorker {
@@ -34,12 +50,32 @@ impl TaskWorker {
         &self.task
     }
 
+    pub const fn task_mut(&mut self) -> &mut Task {
+        &mut self.task
+    }
+
     pub const fn last_result(&self) -> Option<&TaskResult> {
         self.last_result.as_ref()
     }
 
     pub const fn is_running(&self) -> bool {
         self.proc.is_some()
+    }
+
+    pub fn status(&self, plugins: &HashMap<String, Plugin>) -> TaskStatus<'_> {
+        if !self.is_valid(plugins) {
+            TaskStatus::Invalid
+        } else if self.is_running() {
+            TaskStatus::Running
+        } else if let Some(result) = self.last_result() {
+            match result.exit_code {
+                Some(0) => TaskStatus::Success(result),
+                Some(_) => TaskStatus::Failure(result),
+                None => TaskStatus::Stopped, // Process was killed or terminated by signal
+            }
+        } else {
+            TaskStatus::Stopped
+        }
     }
 
     pub fn is_valid(&self, plugins: &HashMap<String, Plugin>) -> bool {
@@ -56,21 +92,6 @@ impl TaskWorker {
         true
     }
 
-    pub fn is_reviewed(&self, plugins: &HashMap<String, Plugin>) -> bool {
-        if self.task.last_modified > self.task.last_reviewed {
-            return false;
-        }
-
-        for inst in &self.task.plugins {
-            if let Some(plugin) = plugins.get(&inst.id) &&
-                plugin.last_modified > self.task.last_reviewed {
-                return false;
-            }
-        }
-
-        true
-    }
-
     pub fn update(&mut self) {
         if let Some(result) = TaskProcess::update(&mut self.proc) {
             self.last_result = Some(result);
@@ -78,13 +99,8 @@ impl TaskWorker {
     }
 
     pub fn run(&mut self, plugins: &HashMap<String, Plugin>) -> anyhow::Result<()> {
-        if !self.is_valid(plugins) {
-            anyhow::bail!("task is invalid");
-        }
-
-        if !self.is_reviewed(plugins) {
-            anyhow::bail!("task needs review");
-        }
+        assert!(!self.is_running(), "cannot run task while it's already running");
+        assert!(self.is_valid(plugins), "cannot run invalid task");
 
         let script =
             apply_plugins(
@@ -114,13 +130,6 @@ struct TaskProcess {
     stderr: Vec<String>,
     stdout_reader: PipeReader,
     stderr_reader: PipeReader,
-}
-
-struct TaskResult {
-    exit_code: Option<i32>,
-    stdout: Vec<String>,
-    stderr: Vec<String>,
-    elapsed_ms: u32,
 }
 
 impl TaskProcess {
@@ -155,17 +164,17 @@ impl TaskProcess {
                 proc.stderr_reader.finish(&mut proc.stderr);
 
                 let result = TaskResult {
+                    elapsed: proc.start_time.elapsed(),
                     exit_code: status.code(),
                     stdout: proc.stdout,
                     stderr: proc.stderr,
-                    elapsed_ms: proc.start_time.elapsed().as_millis() as u32,
                 };
 
                 log::info!(
                     "task \"{}\" exited with status {:?} after {} ms",
                     proc.name,
                     result.exit_code,
-                    result.elapsed_ms);
+                    result.elapsed.as_millis());
 
                 Some(result)
             },

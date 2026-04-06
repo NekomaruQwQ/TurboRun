@@ -1,4 +1,5 @@
-mod core;
+mod util;
+mod data;
 mod plugin;
 mod worker;
 mod engine;
@@ -31,14 +32,12 @@ fn main() -> eframe::Result {
 
     pretty_env_logger::init();
 
-    let _job = create_job_object();
-
     eframe::run_native(
         "TurboRun",
         NativeOptions {
             viewport:
                 ViewportBuilder::default()
-                    .with_inner_size((1280.0, 800.0))
+                    .with_inner_size((960.0, 600.0))
                     .with_resizable(false)
                     .with_maximize_button(false),
             centered: true,

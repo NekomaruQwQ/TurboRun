@@ -701,6 +701,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
+
+[[package]]
 name = "fax"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2378,6 +2384,7 @@ dependencies = [
  "eframe",
  "egui",
  "euclid",
+ "fastrand",
  "itertools",
  "log",
  "pretty_env_logger",

@@ -13,6 +13,7 @@ anyhow = "1.0"
 clap = { version = "4.6.0", features = ["derive", "env"] }
 egui = "0.34.1"
 euclid = "0.22.14"
+fastrand = "2.4.0"
 itertools = "0.14.0"
 log = "0.4.29"
 pretty_env_logger = "0.5.0"

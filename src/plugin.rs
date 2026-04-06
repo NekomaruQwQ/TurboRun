@@ -1,28 +1,20 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io;
 use std::path::Path;
 use std::time::SystemTime;
 
 use anyhow::Context as _;
 use tap::Pipe as _;
 
-use crate::core::*;
-
-fn none_if_not_found<T>(result: io::Result<T>) -> io::Result<Option<T>> {
-    match result {
-        Ok(value) =>
-            Ok(Some(value)),
-        Err(err) if err.kind() == io::ErrorKind::NotFound =>
-            Ok(None),
-        Err(err) =>
-            Err(err),
-    }
-}
+use crate::util::*;
+use crate::data::*;
 
 pub fn scan_plugins(dir: &Path) -> anyhow::Result<Vec<Plugin>> {
     fs::read_dir(dir)
+        .pipe(none_if_not_found)
         .context("fs::read_dir failed")?
+        .into_iter()
+        .flatten()
         .filter_map(Result::ok)
         .flat_map(|entry| {
             scan_plugins_from_dir_entry(dir, &entry)
