@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Context as _;
@@ -20,17 +21,37 @@ pub struct TaskEngine {
 }
 
 impl TaskEngine {
-    pub fn new(
-        config_path: PathBuf,
-        plugin_dir: PathBuf) -> Self {
-        Self {
+    pub fn new(config_path: &Path, plugin_dir: &Path) -> Self {
+        let mut engine = Self {
             plugins: HashMap::new(),
             tasks: HashMap::new(),
-            config_path,
-            plugin_dir,
-        }
-    }
+            config_path: config_path.to_owned(),
+            plugin_dir: plugin_dir.to_owned(),
+        };
 
+
+        // Failure to load the config is a fatal error and continuing may cause data
+        // loss, so we panic instead of just logging the error.
+        if let Err(err) = engine.load_config() {
+            panic!("failed to load config at {}: {err:?}", config_path.display());
+        }
+
+        // Failure to scan plugins is not a fatal error: tasks that depend on missing
+        // plugins will simply be invalid and won't run, but the user can still edit
+        // the config and fix the problem. So we just log the error and continue.
+        if let Err(err) = engine.scan_plugins() {
+            log::error!("failed to scan plugins in {}: {err:?}", plugin_dir.display());
+        }
+
+        engine
+    }
+}
+
+#[allow(
+    dead_code,
+    clippy::allow_attributes,
+    reason = "accessor methods may be needed in the future")]
+impl TaskEngine {
     pub const fn config_path(&self) -> &PathBuf {
         &self.config_path
     }
@@ -39,11 +60,7 @@ impl TaskEngine {
         &self.plugin_dir
     }
 
-    pub const fn plugins(&self) -> &HashMap<String, Plugin> {
-        &self.plugins
-    }
-
-    pub fn tasks(&self) -> impl Iterator<Item = &TaskWorker> {
+    pub fn tasks_sorted(&self) -> impl Iterator<Item = &TaskWorker> {
         self.tasks
             .values()
             .sorted_by_key(|worker| &worker.task().name)
@@ -55,8 +72,18 @@ impl TaskEngine {
             .sorted_by_key(|plugin| &plugin.name)
     }
 
-    pub const fn tasks_mut(&mut self) -> &mut HashMap<TaskId, TaskWorker> {
-        &mut self.tasks
+    pub fn task_status(&self, task_id: TaskId) -> TaskStatus {
+        self.tasks
+            .get(&task_id)
+            .expect("invalid task_id")
+            .status(&self.plugins)
+    }
+
+    pub fn task_is_valid(&self, task_id: TaskId) -> bool {
+        self.tasks
+            .get(&task_id)
+            .expect("invalid task_id")
+            .is_valid(&self.plugins)
     }
 
     pub fn create_task(&self) -> Task {
@@ -68,6 +95,31 @@ impl TaskEngine {
         }
     }
 
+    pub fn insert_task(&mut self, task: Task) {
+        self.tasks.insert(task.id, TaskWorker::new(task));
+    }
+
+    pub fn update_task(&mut self, task: Task) {
+        self.tasks
+            .get_mut(&task.id)
+            .expect("task must already exist to be updated")
+            .set_task(task);
+    }
+
+    pub fn update_or_insert_task(&mut self, task: Task) {
+        if let Some(worker) = self.tasks.get_mut(&task.id) {
+            worker.set_task(task);
+        } else {
+            self.insert_task(task);
+        }
+    }
+
+    pub fn remove_task(&mut self, task_id: TaskId) {
+        self.tasks.remove(&task_id);
+    }
+}
+
+impl TaskEngine {
     pub fn load_config(&mut self) -> anyhow::Result<()> {
         if self.tasks.values().any(TaskWorker::is_running) {
             anyhow::bail!("cannot load config while tasks are running");

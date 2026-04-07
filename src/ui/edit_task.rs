@@ -168,17 +168,17 @@ pub fn edit_task_ui(
         if ui.add_enabled(valid, Button::new(format!("{}  Save", icon::SAVE))).clicked() {
             task.last_modified = SystemTime::now();
             return (
-                Some(PageAction::SaveTask(task.clone())),
-                Some(PageNavigation::Task(task.id)));
+                Some(Action::SaveTask(task.clone())),
+                Some(Page::Task(task.id)));
         }
 
         if ui.button(format!("{}  Cancel", icon::TIMES)).clicked() {
             return (
                 None,
                 Some(if is_existing {
-                    PageNavigation::Task(task.id)
+                    Page::Task(task.id)
                 } else {
-                    PageNavigation::Dashboard
+                    Page::Dashboard
                 }));
         }
 
@@ -202,7 +202,7 @@ pub fn edit_task_ui(
                 if ui.button(label).clicked() {
                     if armed {
                         ui.data_mut(|d| d.remove::<bool>(confirm_id));
-                        result = (Some(PageAction::DeleteTask(task.id)), Some(PageNavigation::Dashboard));
+                        result = (Some(Action::DeleteTask(task.id)), Some(Page::Dashboard));
                     } else {
                         ui.data_mut(|d| d.insert_temp(confirm_id, true));
                     }

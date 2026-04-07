@@ -12,12 +12,13 @@ use anyhow::Context as _;
 use crate::data::*;
 use crate::plugin::*;
 
-pub enum TaskStatus<'a> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TaskStatus {
     Invalid,
     Stopped,
     Running,
-    Success(&'a TaskResult),
-    Failure(&'a TaskResult),
+    Success,
+    Failure,
 }
 
 pub struct TaskWorker {
@@ -50,27 +51,23 @@ impl TaskWorker {
         &self.task
     }
 
-    pub const fn task_mut(&mut self) -> &mut Task {
-        &mut self.task
-    }
-
-    pub const fn last_result(&self) -> Option<&TaskResult> {
-        self.last_result.as_ref()
-    }
-
     pub const fn is_running(&self) -> bool {
         self.proc.is_some()
     }
 
-    pub fn status(&self, plugins: &HashMap<String, Plugin>) -> TaskStatus<'_> {
+    pub fn set_task(&mut self, task: Task) {
+        self.task = task;
+    }
+
+    pub fn status(&self, plugins: &HashMap<String, Plugin>) -> TaskStatus {
         if !self.is_valid(plugins) {
             TaskStatus::Invalid
         } else if self.is_running() {
             TaskStatus::Running
-        } else if let Some(result) = self.last_result() {
+        } else if let Some(ref result) = self.last_result {
             match result.exit_code {
-                Some(0) => TaskStatus::Success(result),
-                Some(_) => TaskStatus::Failure(result),
+                Some(0) => TaskStatus::Success,
+                Some(_) => TaskStatus::Failure,
                 None => TaskStatus::Stopped, // Process was killed or terminated by signal
             }
         } else {
@@ -79,17 +76,24 @@ impl TaskWorker {
     }
 
     pub fn is_valid(&self, plugins: &HashMap<String, Plugin>) -> bool {
-        if self.task.command.trim().is_empty() {
-            return false;
-        }
+        !self.task.command.trim().is_empty() && {
+            self.task
+                .plugins
+                .iter()
+                .all(|inst| {
+                    let Some(plugin) = plugins.get(&inst.name) else {
+                        return false;
+                    };
 
-        for inst in &self.task.plugins {
-            if !plugins.contains_key(&inst.name) {
-                return false;
-            }
+                    inst.vars
+                        .iter()
+                        .all(|&(ref key, ref value)| {
+                            !key.trim().is_empty() &&
+                            !value.trim().is_empty() &&
+                                plugin.source.contains(&["{{", key, "}}"].concat())
+                        })
+                })
         }
-
-        true
     }
 
     pub fn update(&mut self) {
@@ -102,7 +106,9 @@ impl TaskWorker {
     /// The result (with `exit_code: None`) is collected on the next `update()`.
     pub fn stop(&mut self) {
         if let Some(ref mut proc) = self.proc {
-            let _ = proc.child.kill();
+            proc.child
+                .kill()
+                .unwrap_or_else(|err| log::error!("failed to kill process for task \"{}\": {err}", self.task.name));
         }
     }
 

@@ -10,12 +10,11 @@ use crate::worker::TaskStatus;
 pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::PageResult {
     // Phase 1: render UI using immutable access, collect interaction results.
     let (did_start, did_stop) = {
-        let plugins = engine.plugins();
         let worker = engine.task(task_id).expect("task_id must be valid");
         let task = worker.task();
-        let status = worker.status(plugins);
+        let status = engine.task_status(task_id);
         let is_running = worker.is_running();
-        let is_valid = worker.is_valid(plugins);
+        let is_valid = engine.task_is_valid(task_id);
 
         // — Heading + controls card —
         let (did_start, did_stop) = card(ui, |ui| {
@@ -27,7 +26,7 @@ pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::
                 let t = ui.add_enabled(
                     is_running,
                     Button::new(format!("{}  Stop", icon::STOP))).clicked();
-                ui.label(format_status(&status));
+                ui.label(format_status(status));
                 (s, t)
             }).inner
         });
@@ -144,12 +143,12 @@ fn card<R>(ui: &mut Ui, body: impl FnOnce(&mut Ui) -> R) -> R {
         .inner
 }
 
-fn format_status(status: &TaskStatus<'_>) -> RichText {
-    match *status {
-        TaskStatus::Invalid   => RichText::new("Invalid").color(color::ORANGE),
-        TaskStatus::Stopped   => RichText::new("").weak(),
-        TaskStatus::Running   => RichText::new("Running").color(color::BLUE),
-        TaskStatus::Success(_) => RichText::new("Success").color(color::GREEN),
-        TaskStatus::Failure(_) => RichText::new("Failed").color(color::RED),
+fn format_status(status: TaskStatus) -> RichText {
+    match status {
+        TaskStatus::Invalid => RichText::new("Invalid").color(color::ORANGE),
+        TaskStatus::Stopped => RichText::new("").weak(),
+        TaskStatus::Running => RichText::new("Running").color(color::BLUE),
+        TaskStatus::Success => RichText::new("Success").color(color::GREEN),
+        TaskStatus::Failure => RichText::new("Failed").color(color::RED),
     }.small()
 }

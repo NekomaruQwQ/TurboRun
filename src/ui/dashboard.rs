@@ -29,13 +29,20 @@ pub fn dashboard_ui(ui: &mut Ui, engine: &mut TaskEngine) -> PageResult {
     // Phase 1: collect display snapshot while engine is immutably borrowed.
     // `TaskStatus<'_>` borrows from the worker and cannot be stored, so we
     // eagerly format it into an owned `RichText` here.
-    let tasks: Vec<TaskRow> = engine.tasks()
-        .map(|w| TaskRow {
-            id:         w.task().id,
-            name:       w.task().name.clone(),
-            status:     format_task_status(&w.status(engine.plugins())),
-            is_running: w.is_running(),
-            can_run:    !w.is_running() && w.is_valid(engine.plugins()),
+    let tasks: Vec<TaskRow> = engine.tasks_sorted()
+        .map(|worker| {
+            let task_id = worker.task().id;
+            let task_name = worker.task().name.clone();
+            let task_status = format_task_status(&engine.task_status(task_id));
+            let is_running = worker.is_running();
+            let is_valid = engine.task_is_valid(task_id);
+            TaskRow {
+                id:         task_id,
+                name:       task_name,
+                status:     task_status,
+                is_running,
+                can_run:    !is_running && is_valid,
+            }
         })
         .collect();
 
@@ -100,7 +107,7 @@ pub fn dashboard_ui(ui: &mut Ui, engine: &mut TaskEngine) -> PageResult {
     if let Some(id) = action_stop { engine.stop_task(id); }
 
     if let Some(id) = action_edit {
-        (None, Some(PageNavigation::TaskEditor(id)))
+        (None, Some(Page::TaskEditor(engine.task(id).unwrap().task().clone())))
     } else {
         (None, None)
     }
@@ -114,9 +121,9 @@ fn format_task_status(status: &TaskStatus) -> RichText {
             RichText::new("").weak(),
         TaskStatus::Running =>
             RichText::new("Running").color(color::BLUE),
-        TaskStatus::Success(_) =>
+        TaskStatus::Success =>
             RichText::new("Success").color(color::GREEN),
-        TaskStatus::Failure(_) =>
+        TaskStatus::Failure =>
             RichText::new("Failed").color(color::RED),
     }.small()
 }
