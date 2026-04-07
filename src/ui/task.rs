@@ -6,6 +6,7 @@ use crate::engine::TaskEngine;
 use crate::icon;
 use crate::worker::TaskStatus;
 
+#[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
 pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::PageResult {
     // Phase 1: render UI using immutable access, collect interaction results.
     let (did_start, did_stop) = {
@@ -54,7 +55,7 @@ pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::
                                 } else {
                                     let vars = inst.vars
                                         .iter()
-                                        .map(|(k, v)| format!("{k}={v}"))
+                                        .map(|&(ref k, ref v)| format!("{k}={v}"))
                                         .collect::<Vec<_>>()
                                         .join(", ");
                                     ui.label(format!("{} ({})", inst.name, vars));
@@ -144,7 +145,7 @@ fn card<R>(ui: &mut Ui, body: impl FnOnce(&mut Ui) -> R) -> R {
 }
 
 fn format_status(status: &TaskStatus<'_>) -> RichText {
-    match status {
+    match *status {
         TaskStatus::Invalid   => RichText::new("Invalid").color(color::ORANGE),
         TaskStatus::Stopped   => RichText::new("").weak(),
         TaskStatus::Running   => RichText::new("Running").color(color::BLUE),

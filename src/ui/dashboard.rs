@@ -8,20 +8,6 @@ use crate::worker::TaskStatus;
 
 use super::*;
 
-/// What the dashboard wants the App layer to do after this frame.
-///
-/// `run_task` / `stop_task` only need `&mut TaskEngine` and are applied
-/// inside `dashboard_ui` itself. The Edit and New actions are returned
-/// instead because they need to mutate fields on `App` (`task_edit`,
-/// `page`) that the dashboard does not own.
-pub enum DashboardAction {
-    None,
-    /// Open the editor on a clone of an existing task.
-    EditTask(TaskId),
-    /// Open the editor on a fresh blank task.
-    NewTask,
-}
-
 pub fn dashboard_ui(ui: &mut Ui, engine: &mut TaskEngine) -> PageResult {
     /// Fixed visual rhythm for every row. Kept as constants (rather than
     /// derived from text size) so disabled/enabled buttons don't reflow the

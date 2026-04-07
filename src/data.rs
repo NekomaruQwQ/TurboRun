@@ -4,7 +4,6 @@
 mod task_id;
 pub use task_id::TaskId;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 

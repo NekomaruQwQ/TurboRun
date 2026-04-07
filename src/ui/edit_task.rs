@@ -16,6 +16,7 @@ use super::*;
 /// `is_existing` controls the heading and whether the Delete button is shown.
 /// It is computed by the caller because we hold no mutable borrow of `engine`
 /// here and the App layer already knows the answer.
+#[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
 pub fn edit_task_ui(
     ui: &mut Ui,
     plugins: &[&Plugin],
@@ -103,7 +104,7 @@ pub fn edit_task_ui(
 
                 ui.weak("keys must match {{name}} placeholders in the plugin source");
 
-                for (row_idx, (key, value)) in inst.vars.iter_mut().enumerate() {
+                for (row_idx, &mut (ref mut key, ref mut value)) in inst.vars.iter_mut().enumerate() {
                     ui.push_id(row_idx, |ui| {
                         ui.horizontal(|ui| {
                             ui.add(

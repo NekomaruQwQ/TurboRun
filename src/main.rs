@@ -59,7 +59,7 @@ struct Args {
     #[arg(
         short,
         long,
-        env = "TURBORUN_CONFIG_PATH",
+        env = "TURBORUN_CONFIG",
         default_value = "TurboRun.toml")]
     config_path: String,
 
@@ -68,13 +68,13 @@ struct Args {
     #[arg(
         short,
         long,
-        env = "TURBORUN_PLUGIN_DIR",
+        env = "TURBORUN_PLUGIN",
         default_value = "plugins")]
     plugin_dir: String,
 }
 
 fn main() -> eframe::Result {
-    use tap::prelude::*;
+    
     use egui::*;
     use eframe::*;
 

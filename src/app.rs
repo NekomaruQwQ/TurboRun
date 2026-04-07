@@ -3,7 +3,7 @@ use std::time::Duration;
 use std::time::SystemTime;
 
 use egui::*;
-use tap::Pipe;
+use tap::Pipe as _;
 
 use crate::theme;
 use crate::color;
@@ -119,7 +119,7 @@ impl App {
                         !task_mut.is_running(),
                         "task must not be running to be started");
                     if let Err(err) = self.engine.run_task(id) {
-                        log::error!("failed to start task {}: {err:?}", id);
+                        log::error!("failed to start task {id}: {err:?}");
                     }
                 },
                 PageAction::StopTask(id) => {
@@ -137,7 +137,7 @@ impl App {
                     } else {
                         self.engine
                             .tasks_mut()
-                            .insert(task.id, TaskWorker::new(task.clone()));
+                            .insert(task.id, TaskWorker::new(task));
                     }
                     if let Err(err) = self.engine.save_config() {
                         log::error!("save_config failed: {err:?}");
@@ -146,7 +146,7 @@ impl App {
                 PageAction::DeleteTask(id) => {
                     if let Some(worker) = self.engine.task(id) {
                         if worker.is_running() {
-                            log::error!("refusing to delete running task {}", id);
+                            log::error!("refusing to delete running task {id}");
                         } else {
                             self.engine.tasks_mut().remove(&id);
                             if let Err(err) = self.engine.save_config() {
@@ -154,7 +154,7 @@ impl App {
                             }
                         }
                     } else {
-                        log::error!("failed to find task {} to delete", id);
+                        log::error!("failed to find task {id} to delete");
                     }
                 },
             }
@@ -204,7 +204,7 @@ impl App {
                 task.task().id;
             let task_name =
                 task.task().name.as_str();
-            let task_status =
+            let _task_status =
                 task.status(self.engine.plugins());
             ui
                 .button(task_name)

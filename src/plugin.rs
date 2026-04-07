@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::SystemTime;
 
 use anyhow::Context as _;
 use tap::Pipe as _;
@@ -107,7 +106,7 @@ pub fn apply_plugins(
                 .with_context(|| format!("plugin not found: {}", inst.name))?
                 .source
                 .clone();
-        for (key, value) in &inst.vars {
+        for &(ref key, ref value) in &inst.vars {
             plugin = plugin.replace(&["{{", key, "}}"].concat(), value);
         }
 

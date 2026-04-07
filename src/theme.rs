@@ -18,26 +18,26 @@ use crate::color;
 // `Color32::from_rgb` is `const`, so these can live as crate constants and be
 // referenced from other modules (e.g. `app.rs` for the nav panel fill).
 
-/// Deepest sunken surface — text edits, scroll area gutters, etc. (zinc-950)
+/// Deepest sunken surface — text edits, scroll area gutters, etc. (zinc-950).
 pub const BG_INPUT:       Color32 = Color32::from_rgb(0x09, 0x09, 0x0B);
 /// Main content background. Darker than the nav so the main canvas reads as
-/// recessed. (zinc-900)
+/// recessed. (zinc-900).
 pub const BG_APP:         Color32 = Color32::from_rgb(0x18, 0x18, 0x1B);
-/// Left nav panel background. One step lighter than [`BG_APP`]. (zinc-800)
+/// Left nav panel background. One step lighter than [`BG_APP`]. (zinc-800).
 pub const BG_NAV:         Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
-/// Card / row surface on the main canvas. Same as [`BG_NAV`] (zinc-800);
+/// Card / row surface on the main canvas. Same as [`BG_NAV`] (zinc-800).
 /// cards visibly pop against the darker zinc-900 main background.
 pub const BG_CARD:        Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
-/// Card surface under hover. (zinc-700)
+/// Card surface under hover. (zinc-700).
 pub const BG_CARD_HOVER:  Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
-/// Card surface while pressed / open. (zinc-700)
+/// Card surface while pressed / open. (zinc-700).
 pub const BG_CARD_ACTIVE: Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
 
 /// Subtle separator stroke — used for the few places (e.g. collapsing header
-/// bottom border) where egui still draws a noninteractive stroke. (zinc-700)
+/// bottom border) where egui still draws a noninteractive stroke. (zinc-700).
 pub const STROKE_SUBTLE:  Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
 
-/// Default body text color. (zinc-400)
+/// Default body text color. (zinc-400).
 pub const TEXT_PRIMARY:   Color32 = Color32::from_rgb(0xA1, 0xA1, 0xAA);
 
 /// Shared corner radius for every interactive widget.

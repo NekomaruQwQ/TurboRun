@@ -101,7 +101,7 @@ impl TaskWorker {
     /// Kills the running process, if any.
     /// The result (with `exit_code: None`) is collected on the next `update()`.
     pub fn stop(&mut self) {
-        if let Some(proc) = &mut self.proc {
+        if let Some(ref mut proc) = self.proc {
             let _ = proc.child.kill();
         }
     }
@@ -112,7 +112,7 @@ impl TaskWorker {
     /// When stopped, returns the captured lines from the last result.
     /// Returns `&[]` if the task has never been run.
     pub fn stdout(&self) -> &[String] {
-        if let Some(proc) = &self.proc {
+        if let Some(ref proc) = self.proc {
             &proc.stdout
         } else {
             self.last_result.as_ref().map_or(&[], |r| &r.stdout)
@@ -121,13 +121,14 @@ impl TaskWorker {
 
     /// Returns the current stderr lines (same semantics as `stdout()`).
     pub fn stderr(&self) -> &[String] {
-        if let Some(proc) = &self.proc {
+        if let Some(ref proc) = self.proc {
             &proc.stderr
         } else {
             self.last_result.as_ref().map_or(&[], |r| &r.stderr)
         }
     }
 
+    #[expect(clippy::panic_in_result_fn, reason = "precondition check")]
     pub fn run(&mut self, plugins: &HashMap<String, Plugin>) -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");
@@ -187,7 +188,11 @@ impl TaskProcess {
 
         match proc.child.try_wait() {
             Ok(Some(status)) => {
-                let mut proc = proc_mut.take().unwrap();
+                let mut proc = {
+                    #[expect(clippy::unwrap_in_result, reason = "guaranteed by type invariant")] {
+                        proc_mut.take().unwrap()
+                    }
+                };
 
                 // Join threads (guarantees all lines are sent), then drain
                 // any remaining lines that arrived after the last read_into.
@@ -241,7 +246,9 @@ impl PipeReader {
             let reader = io::BufReader::new(pipe);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    tx.send(line).ok();
+                    tx.send(line).unwrap_or_else(|err| {
+                        log::error!("failed to send data from pipe reader thread: {err}");
+                    });
                 } else {
                     break;
                 }

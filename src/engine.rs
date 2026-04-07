@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Context as _;
@@ -126,6 +125,7 @@ impl TaskEngine {
     /// Polls all workers: drains output channels and collects exit status.
     /// Call once per frame.
     pub fn update(&mut self) {
+        #[expect(clippy::iter_over_hash_type, reason = "update order does not matter")]
         for worker in self.tasks.values_mut() {
             worker.update();
         }
