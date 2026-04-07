@@ -47,6 +47,7 @@ pub struct Task {
     /// Plugins are applied in the order they are listed, i.e. the first plugin
     /// is the innermost wrapper around the command, and the last plugin is the
     /// outermost.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugins: Vec<PluginInstance>,
 
     /// The last time this task was modified by the user, in milliseconds since

@@ -3,7 +3,7 @@ use egui::*;
 use crate::engine::TaskEngine;
 use crate::icon;
 
-pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) {
+pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) -> super::PageResult {
     ui
         .button(format!("{}  Reload Plugins", icon::REFRESH))
         .clicked()
@@ -35,4 +35,6 @@ pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) {
             });
         }
     });
+
+    (None, None)
 }

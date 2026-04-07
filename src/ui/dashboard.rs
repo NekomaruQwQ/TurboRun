@@ -1,10 +1,12 @@
 use egui::*;
 
 use crate::color;
+use crate::icon;
 use crate::data::TaskId;
 use crate::engine::TaskEngine;
-use crate::icon;
 use crate::worker::TaskStatus;
+
+use super::*;
 
 /// What the dashboard wants the App layer to do after this frame.
 ///
@@ -20,9 +22,7 @@ pub enum DashboardAction {
     NewTask,
 }
 
-pub fn dashboard_ui(
-    ui: &mut Ui,
-    engine: &mut TaskEngine) -> DashboardAction {
+pub fn dashboard_ui(ui: &mut Ui, engine: &mut TaskEngine) -> PageResult {
     /// Fixed visual rhythm for every row. Kept as constants (rather than
     /// derived from text size) so disabled/enabled buttons don't reflow the
     /// row and so columns line up across the list.
@@ -114,9 +114,9 @@ pub fn dashboard_ui(
     if let Some(id) = action_stop { engine.stop_task(id); }
 
     if let Some(id) = action_edit {
-        DashboardAction::EditTask(id)
+        (None, Some(PageNavigation::TaskEditor(id)))
     } else {
-        DashboardAction::None
+        (None, None)
     }
 }
 

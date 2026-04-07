@@ -3,17 +3,20 @@ use std::time::Duration;
 use std::time::SystemTime;
 
 use egui::*;
+use tap::Pipe;
 
 use crate::theme;
 use crate::color;
 use crate::icon;
 
 use crate::data::*;
+use crate::ui::PageResult;
 use crate::worker::TaskStatus;
 use crate::worker::TaskWorker;
 use crate::engine::TaskEngine;
 
 use crate::ui;
+use crate::ui::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Page {
@@ -82,30 +85,108 @@ impl eframe::App for App {
             .resizable(false)
             .show_inside(ui, |ui| {
                 ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
-                    self.ui_nav(ui);
+                    self.nav_ui(ui);
                 });
             });
         CentralPanel::default_margins()
             .show_inside(ui, |ui| {
                 match self.page {
                     Page::Dashboard =>
-                        self.ui_dashboard(ui),
+                        ui::dashboard_ui(ui, &mut self.engine),
                     Page::Plugins =>
                         ui::plugins_ui(ui, &mut self.engine),
                     Page::Task(task_id) =>
                         ui::task_ui(ui, &mut self.engine, task_id),
-                    Page::TaskEditor(task) =>
-                        self.ui_edit_task(ui, task),
-                }
+                    Page::TaskEditor(ref mut task) =>
+                        ui::edit_task_ui(ui, &self.engine.plugins_sorted().collect::<Vec<_>>(), task, self.engine.task(task.id).is_some()),
+                }.pipe(|res| self.handle_page_result(res));
             });
     }
 }
 
 impl App {
-}
 
-impl App {
-    fn ui_nav(&mut self, ui: &mut Ui) {
+    fn handle_page_result(&mut self, (action, navigation): PageResult) {
+        if let Some(action) = action {
+            match action {
+                PageAction::RunTask(id) => {
+                    let task_mut =
+                        self.engine
+                            .tasks_mut()
+                            .get_mut(&id)
+                            .expect("task must be present to be run");
+                    assert!(
+                        !task_mut.is_running(),
+                        "task must not be running to be started");
+                    if let Err(err) = self.engine.run_task(id) {
+                        log::error!("failed to start task {}: {err:?}", id);
+                    }
+                },
+                PageAction::StopTask(id) => {
+                    self.engine
+                        .tasks_mut()
+                        .get_mut(&id)
+                        .expect("task must be present to be stopped")
+                        .stop();
+                },
+                PageAction::SaveTask(task) => {
+                    if let Some(worker) = self.engine.tasks_mut().get_mut(&task.id) {
+                        // Update in place so the worker's `proc` / `last_result`
+                        // survive — important if the user edits a running task.
+                        *worker.task_mut() = task.clone();
+                    } else {
+                        self.engine
+                            .tasks_mut()
+                            .insert(task.id, TaskWorker::new(task.clone()));
+                    }
+                    if let Err(err) = self.engine.save_config() {
+                        log::error!("save_config failed: {err:?}");
+                    }
+                },
+                PageAction::DeleteTask(id) => {
+                    if let Some(worker) = self.engine.task(id) {
+                        if worker.is_running() {
+                            log::error!("refusing to delete running task {}", id);
+                        } else {
+                            self.engine.tasks_mut().remove(&id);
+                            if let Err(err) = self.engine.save_config() {
+                                log::error!("save_config failed: {err:?}");
+                            }
+                        }
+                    } else {
+                        log::error!("failed to find task {} to delete", id);
+                    }
+                },
+            }
+        }
+
+        match navigation {
+            Some(PageNavigation::Dashboard) =>
+                self.page = Page::Dashboard,
+            Some(PageNavigation::Plugins) =>
+                self.page = Page::Plugins,
+            Some(PageNavigation::Task(id)) =>
+                self.page = Page::Task(id),
+            Some(PageNavigation::TaskEditor(id)) => {
+                let task = self.engine.task(id)
+                    .map(|worker| worker.task().clone())
+                    .unwrap_or_else(|| Task {
+                        id,
+                        name: String::new(),
+                        command: String::new(),
+                        plugins: Vec::new(),
+                        last_modified: SystemTime::now(),
+                    });
+                self.page = Page::TaskEditor(task);
+            },
+            Some(ui::PageNavigation::TaskEditerCreateNew) => {
+                self.page = Page::TaskEditor(self.engine.create_task());
+            },
+            None => {},
+        }
+    }
+
+    fn nav_ui(&mut self, ui: &mut Ui) {
         ui.selectable_value(&mut self.page, Page::Dashboard, "Dashboard");
         ui.selectable_value(&mut self.page, Page::Plugins, "Plugins");
         ui.separator();
@@ -129,100 +210,6 @@ impl App {
                 .button(task_name)
                 .clicked()
                 .then(|| self.page = Page::Task(task_id));
-        }
-    }
-
-    fn ui_dashboard(&mut self, ui: &mut Ui) {
-        // The dashboard page itself lives in `ui::dashboard`. This wrapper just
-        // owns the App-side reaction to navigation actions (opening the editor),
-        // since `dashboard_ui` only sees `&mut TaskEngine` and can't touch
-        // `self.task_edit` / `self.page`.
-        match ui::dashboard_ui(ui, &mut self.engine) {
-            ui::DashboardAction::None => {}
-            ui::DashboardAction::EditTask(id) => {
-                // Open the editor with a clone of the existing task. The clone
-                // isolates edits from the live worker until Save commits them.
-                if let Some(worker) = self.engine.task(id) {
-                    self.task_edit = Some(ui::TaskEditor::new(worker.task().clone()));
-                    self.page = Page::TaskEditor;
-                }
-            }
-            ui::DashboardAction::NewTask => {
-                // Brand-new task: fresh random id, empty fields, navigate to editor.
-                // The editor decides "is_existing" by checking the engine for this id,
-                // so a freshly-generated id naturally renders as "New Task".
-                self.task_edit = Some(ui::TaskEditor::new(Task {
-                    id: TaskId::random(),
-                    name: String::new(),
-                    command: String::new(),
-                    plugins: Vec::new(),
-                    last_modified: SystemTime::now(),
-                }));
-                self.page = Page::TaskEditor;
-            }
-        }
-    }
-
-    fn ui_edit_task(&mut self, ui: &mut Ui) {
-        // Phase 1: render. Scope the editor borrow so it ends before Phase 2
-        // touches `self.engine` / `self.task_edit` mutably.
-        let action = {
-            let Some(editor) = self.task_edit.as_mut() else {
-                // Defensive fallback for the impossible case where we navigated
-                // to EditTask without a draft. Don't panic — give the user a
-                // way back.
-                ui.label("(no task being edited)");
-                if ui.button("Back").clicked() {
-                    self.page = Page::Dashboard;
-                }
-                return;
-            };
-            // Disjoint borrow: `&self.engine` and `&mut self.task_edit` are
-            // independent fields of `self`, so this compiles.
-            let is_existing = self.engine.task(editor.task.id).is_some();
-            ui::edit_task_ui(ui, &self.engine, editor, is_existing)
-        };
-
-        // Phase 2: apply the action.
-        match action {
-            ui::EditAction::None => {}
-            ui::EditAction::Save => {
-                // `editor.finalize()` already ran inside the editor function,
-                // so `task_edit.task.plugins[i].vars` reflects the row state.
-                if let Some(editor) = self.task_edit.take() {
-                    let id = editor.task.id;
-                    if let Some(worker) = self.engine.tasks_mut().get_mut(&id) {
-                        // Update in place so the worker's `proc` / `last_result`
-                        // survive — important if the user edits a running task.
-                        *worker.task_mut() = editor.task;
-                    } else {
-                        self.engine
-                            .tasks_mut()
-                            .insert(id, TaskWorker::new(editor.task));
-                    }
-                    if let Err(err) = self.engine.save_config() {
-                        log::error!("save_config failed: {err:?}");
-                    }
-                    self.page = Page::Dashboard;
-                }
-            }
-            ui::EditAction::Cancel => {
-                self.task_edit = None;
-                self.page = Page::Dashboard;
-            }
-            ui::EditAction::Delete => {
-                if let Some(editor) = self.task_edit.take() {
-                    let id = editor.task.id;
-                    // Stop first so we don't leak a child process when the
-                    // worker is removed from the map.
-                    self.engine.stop_task(id);
-                    self.engine.tasks_mut().remove(&id);
-                    if let Err(err) = self.engine.save_config() {
-                        log::error!("save_config failed: {err:?}");
-                    }
-                    self.page = Page::Dashboard;
-                }
-            }
         }
     }
 }

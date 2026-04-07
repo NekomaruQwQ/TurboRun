@@ -6,7 +6,7 @@ use crate::engine::TaskEngine;
 use crate::icon;
 use crate::worker::TaskStatus;
 
-pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) {
+pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::PageResult {
     // Phase 1: render UI using immutable access, collect interaction results.
     let (did_start, did_stop) = {
         let plugins = engine.plugins();
@@ -127,6 +127,8 @@ pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) {
     if did_stop {
         engine.stop_task(task_id);
     }
+
+    (None, None)
 }
 
 /// Wraps a UI section in a PWA-style "card": rounded, padded, painted with
