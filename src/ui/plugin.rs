@@ -4,18 +4,12 @@ use crate::engine::TaskEngine;
 use crate::icon;
 
 pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) -> super::PageResult {
+    let mut refresh = false;
+
     ui
         .button(format!("{}  Reload Plugins", icon::REFRESH))
         .clicked()
-        .then(|| {
-            engine
-                .scan_plugins()
-                .unwrap_or_else(|err| {
-                    log::error!(
-                        "failed to scan plugins in {}: {err:?}",
-                        engine.plugin_dir().display());
-                });
-        });
+        .then(|| refresh = true);
 
     ui.add_space(10.0);
 
@@ -36,5 +30,5 @@ pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) -> super::PageResult {
         }
     });
 
-    (None, None)
+    (refresh.then_some(super::Action::RefreshPlugins), None)
 }

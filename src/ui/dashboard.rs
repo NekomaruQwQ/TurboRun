@@ -1,129 +1,131 @@
 use egui::*;
+use egui_flex::*;
 
 use crate::color;
 use crate::icon;
-use crate::data::TaskId;
 use crate::engine::TaskEngine;
 use crate::worker::TaskStatus;
 
 use super::*;
 
-pub fn dashboard_ui(ui: &mut Ui, engine: &mut TaskEngine) -> PageResult {
-    /// Fixed visual rhythm for every row. Kept as constants (rather than
-    /// derived from text size) so disabled/enabled buttons don't reflow the
-    /// row and so columns line up across the list.
-    const ROW_H:    f32 = 24.0;
-    const BTN_W:    f32 = 48.0;
-    const STATUS_W: f32 = 64.0;
+pub fn dashboard_ui(flex: &mut FlexInstance, engine: &TaskEngine) -> PageResult {
+    let mut outer_action = None;
+    let mut outer_next_page = None;
 
-    struct TaskRow {
-        id:         TaskId,
-        name:       String,
-        /// Pre-formatted status badge — owns its data so it can outlive the
-        /// immutable borrow of `engine`.
-        status:     RichText,
-        is_running: bool,
-        can_run:    bool,
-    }
+    for worker in engine.tasks_sorted() {
+        let task_id = worker.task().id;
 
-    // Phase 1: collect display snapshot while engine is immutably borrowed.
-    // `TaskStatus<'_>` borrows from the worker and cannot be stored, so we
-    // eagerly format it into an owned `RichText` here.
-    let tasks: Vec<TaskRow> = engine.tasks_sorted()
-        .map(|worker| {
-            let task_id = worker.task().id;
-            let task_name = worker.task().name.clone();
-            let task_status = format_task_status(&engine.task_status(task_id));
-            let is_running = worker.is_running();
-            let is_valid = engine.task_is_valid(task_id);
-            TaskRow {
-                id:         task_id,
-                name:       task_name,
-                status:     task_status,
-                is_running,
-                can_run:    !is_running && is_valid,
+        flex.add_ui(item().grow(1.0), |ui| {
+            let (action, next_page) =
+                task_card(
+                    ui,
+                    worker.task(),
+                    engine.task_status(task_id),
+                    worker.is_running(),
+                    engine.task_is_valid(task_id));
+            if let Some(action) = action {
+                outer_action = Some(action);
             }
-        })
-        .collect();
-
-    let mut action_edit: Option<TaskId> = None;
-    let mut action_run:  Option<TaskId> = None;
-    let mut action_stop: Option<TaskId> = None;
-
-    // Phase 2: render using only the snapshot (no borrow on engine).
-    ScrollArea::vertical().show(ui, |ui| {
-        for row in &tasks {
-            Frame::new()
-                .fill(ui.visuals().faint_bg_color)
-                .corner_radius(6.0)
-                .inner_margin(Margin::symmetric(10, 6))
-                .show(ui, |ui| {
-                    // `right_to_left` grows from the right edge leftward, so
-                    // each `add_*` call lands one slot further left. The name
-                    // label sits inside a nested `left_to_right` so it hugs
-                    // the leftmost remaining space and `truncate()` clamps to
-                    // its inner width instead of the right-anchored cursor.
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui
-                            .add_sized([BTN_W, ROW_H], Button::new(icon::PENCIL))
-                            .on_hover_text("Edit")
-                            .clicked()
-                        {
-                            action_edit = Some(row.id);
-                        }
-
-                        // Stop — disabled when not running.
-                        if ui.add_enabled_ui(row.is_running, |ui| {
-                            ui.add_sized([BTN_W, ROW_H], Button::new(icon::STOP))
-                        }).inner.on_hover_text("Stop").clicked() {
-                            action_stop = Some(row.id);
-                        }
-
-                        // Run — disabled while already running or invalid.
-                        if ui.add_enabled_ui(row.can_run, |ui| {
-                            ui.add_sized([BTN_W, ROW_H], Button::new(icon::PLAY))
-                        }).inner.on_hover_text("Run").clicked() {
-                            action_run = Some(row.id);
-                        }
-
-                        ui.add_sized(
-                            [STATUS_W, ROW_H],
-                            Label::new(row.status.clone()));
-
-                        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                            ui.add(Label::new(&row.name).truncate());
-                        });
-                    });
-                });
-        }
-    });
-
-    // Phase 3: apply engine-only actions (immutable borrow on engine is fully
-    // released). Actions that touch App state are returned to the caller.
-    if let Some(id) = action_run {
-        engine.run_task(id)
-            .unwrap_or_else(|err| log::error!("run_task {id}: {err:?}"));
+            if let Some(next_page) = next_page {
+                outer_next_page = Some(next_page);
+            }
+        });
     }
-    if let Some(id) = action_stop { engine.stop_task(id); }
 
-    if let Some(id) = action_edit {
-        (None, Some(Page::TaskEditor(engine.task(id).unwrap().task().clone())))
-    } else {
-        (None, None)
-    }
+    (outer_action, outer_next_page)
 }
 
-fn format_task_status(status: &TaskStatus) -> RichText {
-    match *status {
-        TaskStatus::Invalid =>
-            RichText::new("Invalid").color(color::ORANGE),
-        TaskStatus::Stopped =>
-            RichText::new("").weak(),
-        TaskStatus::Running =>
-            RichText::new("Running").color(color::BLUE),
-        TaskStatus::Success =>
-            RichText::new("Success").color(color::GREEN),
-        TaskStatus::Failure =>
-            RichText::new("Failed").color(color::RED),
-    }.small()
+fn task_card(
+    ui: &mut Ui,
+    task: &Task,
+    status: TaskStatus,
+    is_running: bool,
+    is_valid: bool)
+ -> (Option<Action>, Option<Page>) {
+    widget::card(ui, |ui| {
+        Flex::horizontal()
+            .w_full()
+            .gap([4.0, 0.0].into())
+            .align_items(FlexAlign::Center)
+            .show(ui, |flex| {
+                task_card_content(flex, task, status, is_running, is_valid)
+            })
+            .inner
+    })
+}
+
+fn task_card_content(
+    flex: &mut FlexInstance,
+    task: &Task,
+    status: TaskStatus,
+    is_running: bool,
+    is_valid: bool)
+ -> (Option<Action>, Option<Page>) {
+    let mut action = None;
+    let mut next_page = None;
+
+    let status_ui =
+        match status {
+            TaskStatus::Invalid =>
+                RichText::new("Invalid").color(color::ORANGE),
+            TaskStatus::Stopped =>
+                RichText::new("").weak(),
+            TaskStatus::Running =>
+                RichText::new("Running").color(color::BLUE),
+            TaskStatus::Success =>
+                RichText::new("Success").color(color::GREEN),
+            TaskStatus::Failure =>
+                RichText::new("Failed").color(color::RED),
+        }.small();
+
+    // Run — disabled while already running or invalid.
+    flex
+        .add_ui(item(), |ui| {
+           widget::action_button(
+                ui,
+                !is_running && is_valid,
+                icon::PLAY,
+                "Run")
+        })
+        .inner
+        .clicked()
+        .then(|| action = Some(Action::RunTask(task.id)));
+
+    // Stop — disabled when not running.
+    flex
+        .add_ui(item(), |ui| {
+            widget::action_button(
+                ui,
+                is_running,
+                icon::STOP,
+                "Stop")
+        })
+        .inner
+        .clicked()
+        .then(|| action = Some(Action::StopTask(task.id)));
+
+    // Edit — disabled when running.
+    flex
+        .add_ui(item(), |ui| {
+            widget::action_button(
+                ui,
+                !is_running,
+                icon::PENCIL,
+                "Edit")
+        })
+        .inner
+        .clicked()
+        .then(|| next_page = Some(Page::TaskEditor(task.clone())));
+
+    flex
+        .add(
+            item().grow(1.0),
+            Button::new("")
+                .left_text(&task.name)
+                .right_text(status_ui)
+                .truncate())
+        .clicked()
+        .then(|| next_page = Some(Page::TaskViewer(task.id)));
+
+    (action, next_page)
 }

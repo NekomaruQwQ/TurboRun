@@ -86,7 +86,7 @@ impl TaskEngine {
             .is_valid(&self.plugins)
     }
 
-    pub fn create_task(&self) -> Task {
+    pub fn empty_task(&self) -> Task {
         loop {
             let task = Task::empty();
             if !self.tasks.keys().contains(&task.id) {

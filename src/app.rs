@@ -41,6 +41,15 @@ impl App {
 
     fn on_action(&mut self, action: ui::Action) {
         match action {
+            ui::Action::RefreshPlugins => {
+                self.engine
+                    .scan_plugins()
+                    .unwrap_or_else(|err| {
+                        log::error!(
+                            "failed to scan plugins in {}: {err:?}",
+                            self.engine.plugin_dir().display());
+                    });
+            },
             ui::Action::RunTask(id) => {
                 if let Err(err) = self.engine.run_task(id) {
                     log::error!("failed to start task {id}: {err:?}");

@@ -17,13 +17,73 @@ use super::*;
 /// It is computed by the caller because we hold no mutable borrow of `engine`
 /// here and the App layer already knows the answer.
 #[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
-pub fn edit_task_ui(
+pub fn task_editor_ui(
     ui: &mut Ui,
     plugins: &[&Plugin],
     task: &mut Task,
     is_existing: bool)
  -> PageResult {
-    ui.heading(if is_existing { "Edit Task" } else { "New Task" });
+    ui.separator();
+
+    // — Action row —
+    // Validation mirrors `TaskWorker::is_valid`: we only check the inputs
+    // the user is editing here. Plugin existence is also surfaced inline via
+    // the "(missing)" label, but we don't gate Save on it — letting the user
+    // save a task pointing at a not-yet-loaded plugin is consistent with how
+    // the rest of the app handles missing plugins (mark Invalid, allow edit).
+    let valid =
+        !task.name.trim().is_empty() &&
+        !task.command.trim().is_empty();
+
+    let action = ui.horizontal(|ui| {
+        if ui.add_enabled(valid, Button::new(format!("{}  Save", icon::SAVE))).clicked() {
+            task.last_modified = SystemTime::now();
+            return (
+                Some(Action::SaveTask(task.clone())),
+                Some(Page::TaskViewer(task.id)));
+        }
+
+        if ui.button(format!("{}  Cancel", icon::TIMES)).clicked() {
+            return (
+                None,
+                Some(if is_existing {
+                    Page::TaskViewer(task.id)
+                } else {
+                    Page::Dashboard
+                }));
+        }
+
+        let mut result = (None, None);
+        if is_existing {
+            // Right-aligned two-click delete confirm. State is stashed in
+            // egui memory keyed by task id so it survives across frames but
+            // is automatically cleared the next time `Memory` is wiped (i.e.
+            // never within a session — we explicitly clear on commit).
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let confirm_id = Id::new(("edit_task_delete_confirm", task.id));
+                let armed: bool = ui
+                    .data_mut(|d| d.get_temp::<bool>(confirm_id))
+                    .unwrap_or(false);
+
+                let label = if armed {
+                    RichText::new(format!("{}  Delete?", icon::TRASH)).color(color::RED)
+                } else {
+                    RichText::new(format!("{}  Delete", icon::TRASH))
+                };
+                if ui.button(label).clicked() {
+                    if armed {
+                        ui.data_mut(|d| d.remove::<bool>(confirm_id));
+                        result = (Some(Action::DeleteTask(task.id)), Some(Page::Dashboard));
+                    } else {
+                        ui.data_mut(|d| d.insert_temp(confirm_id, true));
+                    }
+                }
+            });
+        }
+
+        result
+    }).inner;
+
     ui.separator();
 
     // — Name + Command —
@@ -152,64 +212,5 @@ pub fn edit_task_ui(
         task.plugins[i].vars.remove(j);
     }
 
-    ui.separator();
-
-    // — Action row —
-    // Validation mirrors `TaskWorker::is_valid`: we only check the inputs
-    // the user is editing here. Plugin existence is also surfaced inline via
-    // the "(missing)" label, but we don't gate Save on it — letting the user
-    // save a task pointing at a not-yet-loaded plugin is consistent with how
-    // the rest of the app handles missing plugins (mark Invalid, allow edit).
-    let valid =
-        !task.name.trim().is_empty() &&
-        !task.command.trim().is_empty();
-
-    ui.horizontal(|ui| {
-        if ui.add_enabled(valid, Button::new(format!("{}  Save", icon::SAVE))).clicked() {
-            task.last_modified = SystemTime::now();
-            return (
-                Some(Action::SaveTask(task.clone())),
-                Some(Page::Task(task.id)));
-        }
-
-        if ui.button(format!("{}  Cancel", icon::TIMES)).clicked() {
-            return (
-                None,
-                Some(if is_existing {
-                    Page::Task(task.id)
-                } else {
-                    Page::Dashboard
-                }));
-        }
-
-        let mut result = (None, None);
-        if is_existing {
-            // Right-aligned two-click delete confirm. State is stashed in
-            // egui memory keyed by task id so it survives across frames but
-            // is automatically cleared the next time `Memory` is wiped (i.e.
-            // never within a session — we explicitly clear on commit).
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let confirm_id = Id::new(("edit_task_delete_confirm", task.id));
-                let armed: bool = ui
-                    .data_mut(|d| d.get_temp::<bool>(confirm_id))
-                    .unwrap_or(false);
-
-                let label = if armed {
-                    RichText::new(format!("{}  Delete?", icon::TRASH)).color(color::RED)
-                } else {
-                    RichText::new(format!("{}  Delete", icon::TRASH))
-                };
-                if ui.button(label).clicked() {
-                    if armed {
-                        ui.data_mut(|d| d.remove::<bool>(confirm_id));
-                        result = (Some(Action::DeleteTask(task.id)), Some(Page::Dashboard));
-                    } else {
-                        ui.data_mut(|d| d.insert_temp(confirm_id, true));
-                    }
-                }
-            });
-        }
-
-        result
-    }).inner
+    action
 }

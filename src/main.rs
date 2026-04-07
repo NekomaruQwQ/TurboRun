@@ -35,21 +35,21 @@ mod color {
 /// can be passed anywhere a `&str` label is expected.
 mod icon {
     // playback / lifecycle
-    pub const PLAY:         &str = "\u{F04B}  "; // nf-fa-play
-    pub const STOP:         &str = "\u{F04D}  "; // nf-fa-stop
-    pub const REFRESH:      &str = "\u{F021}  "; // nf-fa-refresh
+    pub const PLAY:         &str = "\u{F04B}"; // nf-fa-play
+    pub const STOP:         &str = "\u{F04D}"; // nf-fa-stop
+    pub const REFRESH:      &str = "\u{F021}"; // nf-fa-refresh
 
     // editing / structural
-    pub const PENCIL:       &str = "\u{F040}  "; // nf-fa-pencil
-    pub const PLUS:         &str = "\u{F067}  "; // nf-fa-plus
-    pub const TIMES:        &str = "\u{F00D}  "; // nf-fa-times
-    pub const ARROW_UP:     &str = "\u{F062}  "; // nf-fa-arrow_up
-    pub const ARROW_DOWN:   &str = "\u{F063}  "; // nf-fa-arrow_down
+    pub const PENCIL:       &str = "\u{F040}"; // nf-fa-pencil
+    pub const PLUS:         &str = "\u{F067}"; // nf-fa-plus
+    pub const TIMES:        &str = "\u{F00D}"; // nf-fa-times
+    pub const ARROW_UP:     &str = "\u{F062}"; // nf-fa-arrow_up
+    pub const ARROW_DOWN:   &str = "\u{F063}"; // nf-fa-arrow_down
 
     // domain
-    pub const SAVE:         &str = "\u{F0C7}  "; // nf-fa-floppy_o
-    pub const TRASH:        &str = "\u{F1F8}  "; // nf-fa-trash
-    pub const PUZZLE_PIECE: &str = "\u{F12E}  "; // nf-fa-puzzle_piece
+    pub const SAVE:         &str = "\u{F0C7}"; // nf-fa-floppy_o
+    pub const TRASH:        &str = "\u{F1F8}"; // nf-fa-trash
+    pub const PUZZLE_PIECE: &str = "\u{F12E}"; // nf-fa-puzzle_piece
 }
 
 #[derive(clap::Parser)]
@@ -74,7 +74,7 @@ struct Args {
 }
 
 fn main() -> eframe::Result {
-    
+
     use egui::*;
     use eframe::*;
 

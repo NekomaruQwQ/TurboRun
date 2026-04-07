@@ -18,30 +18,36 @@ use crate::color;
 // `Color32::from_rgb` is `const`, so these can live as crate constants and be
 // referenced from other modules (e.g. `app.rs` for the nav panel fill).
 
-/// Deepest sunken surface — text edits, scroll area gutters, etc. (zinc-950).
-pub const BG_INPUT:       Color32 = Color32::from_rgb(0x09, 0x09, 0x0B);
+const ZINC_950: Color32 = Color32::from_rgb(0x09, 0x09, 0x0B);
+const ZINC_900: Color32 = Color32::from_rgb(0x18, 0x18, 0x1B);
+const ZINC_800: Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
+const ZINC_700: Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
+const ZINC_400: Color32 = Color32::from_rgb(0xA1, 0xA1, 0xAA);
+
+/// Deepest sunken surface — text edits, scroll area gutters, etc.
+pub const COLOR_INPUT: Color32 = ZINC_950;
 /// Main content background. Darker than the nav so the main canvas reads as
-/// recessed. (zinc-900).
-pub const BG_APP:         Color32 = Color32::from_rgb(0x18, 0x18, 0x1B);
-/// Left nav panel background. One step lighter than [`BG_APP`]. (zinc-800).
-pub const BG_NAV:         Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
-/// Card / row surface on the main canvas. Same as [`BG_NAV`] (zinc-800).
-/// cards visibly pop against the darker zinc-900 main background.
-pub const BG_CARD:        Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
-/// Card surface under hover. (zinc-700).
-pub const BG_CARD_HOVER:  Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
-/// Card surface while pressed / open. (zinc-700).
-pub const BG_CARD_ACTIVE: Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
-
+/// recessed.
+pub const COLOR_BACKGROUND: Color32 = ZINC_900;
+/// Alternative background. One step lighter than [`COLOR_BACKGROUND`].
+pub const COLOR_BACKGROUND_ALT: Color32 = ZINC_800;
+/// Card / row surface on the main canvas. One step lighter than [`COLOR_BACKGROUND`].
+pub const COLOR_CARD: Color32 = ZINC_800;
+/// Card surface under hover.
+pub const COLOR_CARD_HOVER: Color32 = ZINC_700;
+/// Card surface while pressed / open.
+pub const COLOR_CARD_ACTIVE: Color32 = ZINC_700;
 /// Subtle separator stroke — used for the few places (e.g. collapsing header
-/// bottom border) where egui still draws a noninteractive stroke. (zinc-700).
-pub const STROKE_SUBTLE:  Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
-
+/// bottom border) where egui still draws a noninteractive stroke.
+pub const COLOR_BORDER:  Color32 = ZINC_700;
 /// Default body text color. (zinc-400).
-pub const TEXT_PRIMARY:   Color32 = Color32::from_rgb(0xA1, 0xA1, 0xAA);
+pub const COLOR_FOREGROUND:   Color32 = ZINC_400;
+
+/// Primary accent color for status badges, links, and selection highlights.
+pub const COLOR_PRIMARY: Color32 = crate::color::BLUE;
 
 /// Shared corner radius for every interactive widget.
-const ROUND: CornerRadius = CornerRadius::same(6);
+const CORNER_RADIUS: CornerRadius = CornerRadius::same(4);
 
 /// Apply the TurboRun visual theme to an egui [`Context`].
 ///
@@ -52,57 +58,57 @@ pub fn setup_style(ctx: &Context) {
         // — Visuals (start from dark and override) —
         let v = &mut style.visuals;
 
-        v.panel_fill            = BG_APP;
-        v.window_fill           = BG_NAV;
-        v.faint_bg_color        = BG_CARD;
-        v.extreme_bg_color      = BG_INPUT;
+        v.panel_fill            = COLOR_BACKGROUND;
+        v.window_fill           = COLOR_BACKGROUND_ALT;
+        v.faint_bg_color        = COLOR_CARD;
+        v.extreme_bg_color      = COLOR_INPUT;
+        v.hyperlink_color       = COLOR_PRIMARY;
         v.window_stroke         = Stroke::NONE;
         v.window_corner_radius  = CornerRadius::same(8);
         v.menu_corner_radius    = CornerRadius::same(8);
-        v.hyperlink_color       = color::BLUE;
         // `override_text_color` forces a single body color across all widgets,
         // which keeps the look uniform. Status badges still get their own
         // colors via `RichText::color`, which takes precedence.
-        v.override_text_color   = Some(TEXT_PRIMARY);
+        v.override_text_color   = Some(COLOR_FOREGROUND);
 
         // Soft accent tint for selection / focus.
-        v.selection.bg_fill     = color::BLUE.linear_multiply(0.35);
-        v.selection.stroke      = Stroke::new(1.0, color::BLUE);
+        v.selection.bg_fill     = COLOR_PRIMARY.linear_multiply(0.35);
+        v.selection.stroke      = Stroke::new(1.0, COLOR_PRIMARY);
 
         // — Per-state widget visuals —
         let w = &mut v.widgets;
 
         // Noninteractive: panels, separators, labels.
-        w.noninteractive.bg_stroke    = Stroke::new(1.0, STROKE_SUBTLE);
-        w.noninteractive.fg_stroke    = Stroke::new(1.0, TEXT_PRIMARY);
-        w.noninteractive.weak_bg_fill = BG_NAV;
+        w.noninteractive.bg_stroke    = Stroke::new(1.0, COLOR_BORDER);
+        w.noninteractive.fg_stroke    = Stroke::new(1.0, COLOR_FOREGROUND);
+        w.noninteractive.weak_bg_fill = COLOR_BACKGROUND_ALT;
 
         // Inactive: idle interactive widgets (buttons, headers, rows).
-        w.inactive.bg_fill       = BG_CARD;
-        w.inactive.weak_bg_fill  = BG_CARD;
+        w.inactive.bg_fill       = COLOR_CARD;
+        w.inactive.weak_bg_fill  = COLOR_CARD;
         w.inactive.bg_stroke     = Stroke::NONE;
-        w.inactive.corner_radius = ROUND;
+        w.inactive.corner_radius = CORNER_RADIUS;
         w.inactive.expansion     = 0.0;
 
         // Hovered.
-        w.hovered.bg_fill        = BG_CARD_HOVER;
-        w.hovered.weak_bg_fill   = BG_CARD_HOVER;
+        w.hovered.bg_fill        = COLOR_CARD_HOVER;
+        w.hovered.weak_bg_fill   = COLOR_CARD_HOVER;
         w.hovered.bg_stroke      = Stroke::NONE;
-        w.hovered.corner_radius  = ROUND;
+        w.hovered.corner_radius  = CORNER_RADIUS;
         w.hovered.expansion      = 0.0;
 
         // Active (pressed).
-        w.active.bg_fill         = BG_CARD_ACTIVE;
-        w.active.weak_bg_fill    = BG_CARD_ACTIVE;
+        w.active.bg_fill         = COLOR_CARD_ACTIVE;
+        w.active.weak_bg_fill    = COLOR_CARD_ACTIVE;
         w.active.bg_stroke       = Stroke::NONE;
-        w.active.corner_radius   = ROUND;
+        w.active.corner_radius   = CORNER_RADIUS;
         w.active.expansion       = 0.0;
 
         // Open (e.g. expanded collapsing header, open combo box).
-        w.open.bg_fill           = BG_CARD_ACTIVE;
-        w.open.weak_bg_fill      = BG_CARD_ACTIVE;
+        w.open.bg_fill           = COLOR_CARD_ACTIVE;
+        w.open.weak_bg_fill      = COLOR_CARD_ACTIVE;
         w.open.bg_stroke         = Stroke::NONE;
-        w.open.corner_radius     = ROUND;
+        w.open.corner_radius     = CORNER_RADIUS;
         w.open.expansion         = 0.0;
 
         // — Style / spacing / interaction —
@@ -113,8 +119,8 @@ pub fn setup_style(ctx: &Context) {
         style.animation_time = 0.0;
         style.interaction.selectable_labels = false;
 
-        style.spacing.item_spacing   = vec2(8.0, 6.0);
-        style.spacing.button_padding = vec2(10.0, 4.0);
+        style.spacing.item_spacing   = vec2(8.0, 4.0);
+        style.spacing.button_padding = vec2(8.0, 4.0);
         style.spacing.menu_margin    = Margin::same(6);
         style.spacing.window_margin  = Margin::same(8);
         style.spacing.indent         = 14.0;

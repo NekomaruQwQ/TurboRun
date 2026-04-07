@@ -7,7 +7,7 @@ use crate::icon;
 use crate::worker::TaskStatus;
 
 #[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
-pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::PageResult {
+pub fn task_viewer_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::PageResult {
     // Phase 1: render UI using immutable access, collect interaction results.
     let (did_start, did_stop) = {
         let worker = engine.task(task_id).expect("task_id must be valid");
@@ -26,7 +26,7 @@ pub fn task_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::
                 let t = ui.add_enabled(
                     is_running,
                     Button::new(format!("{}  Stop", icon::STOP))).clicked();
-                ui.label(format_status(status));
+                // ui.label(format_status(status));
                 (s, t)
             }).inner
         });
