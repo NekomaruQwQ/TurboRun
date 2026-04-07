@@ -27,6 +27,12 @@ pub struct TaskWorker {
     /// The [`TaskProcess`] for the currently running instance of this task,
     /// or `None` if the task is not currently running.
     proc: Option<TaskProcess>,
+    /// Whether a stop has been requested for the currently running process.
+    ///
+    /// Task killed by a stop request exits with code 1 and is marked as failed
+    /// without this flag, so we need to track it separately to show the correct
+    /// status.
+    stop_requested: bool,
     /// The result of the last run, or `None` if the task has not been run yet.
     last_result: Option<TaskResult>,
 }
@@ -43,6 +49,7 @@ impl TaskWorker {
         Self {
             task,
             proc: None,
+            stop_requested: false,
             last_result: None,
         }
     }
@@ -97,7 +104,12 @@ impl TaskWorker {
     }
 
     pub fn update(&mut self) {
-        if let Some(result) = TaskProcess::update(&mut self.proc) {
+        if let Some(mut result) = TaskProcess::update(&mut self.proc) {
+            if self.stop_requested {
+                result.exit_code = None;
+            }
+
+            self.stop_requested = false;
             self.last_result = Some(result);
         }
     }
@@ -106,6 +118,7 @@ impl TaskWorker {
     /// The result (with `exit_code: None`) is collected on the next `update()`.
     pub fn stop(&mut self) {
         if let Some(ref mut proc) = self.proc {
+            self.stop_requested = true;
             proc.child
                 .kill()
                 .unwrap_or_else(|err| log::error!("failed to kill process for task \"{}\": {err}", self.task.name));
