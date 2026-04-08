@@ -1,6 +1,6 @@
 use egui::*;
 
-use crate::color;
+use super::color;
 use crate::worker::TaskStatus;
 
 use super::*;

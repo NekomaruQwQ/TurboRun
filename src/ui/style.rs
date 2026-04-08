@@ -11,7 +11,7 @@
 
 use egui::*;
 
-use crate::color;
+use super::color;
 
 /// Shared corner radius for every interactive widget.
 const CORNER_RADIUS: CornerRadius = CornerRadius::same(4);

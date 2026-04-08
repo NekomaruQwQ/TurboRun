@@ -2,7 +2,7 @@ use egui::*;
 
 use super::*;
 
-pub fn plugins_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
+pub fn plugin_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
     ui
         .button(format!("{}  Reload Plugins", icon::REFRESH))
         .clicked()

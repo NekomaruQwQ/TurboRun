@@ -1,8 +1,5 @@
 #![expect(clippy::large_include_file, reason = "embedded fonts")]
 
-mod color;
-mod style;
-mod icon;
 mod util;
 mod data;
 mod plugin;
@@ -53,7 +50,7 @@ fn main() -> eframe::Result {
         },
         Box::new(|&CreationContext { egui_ctx: ref egui, .. }| {
             use crate::app::App;
-            use crate::style::setup_style;
+            use crate::ui::setup_style;
 
             egui.set_zoom_factor(1.25);
             setup_fonts(egui);

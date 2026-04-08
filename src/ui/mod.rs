@@ -1,19 +1,28 @@
-mod common;
+pub use app::app_ui;
+pub use style::setup_style;
+
+mod color;
+mod style;
+mod icon;
+mod widget;
 
 mod app;
-pub use app::app_ui;
 mod nav;
-use nav::nav_ui;
-mod dashboard;
-use dashboard::dashboard_ui;
-mod plugin;
-use plugin::plugins_ui;
-mod task_viewer;
-use task_viewer::task_viewer_ui;
-mod task_editor;
-use task_editor::task_editor_ui;
 
-use crate::icon;
+mod page {
+    use super::*;
+
+    mod dashboard;
+    mod plugin;
+    mod task_viewer;
+    mod task_editor;
+
+    pub use dashboard::dashboard_ui;
+    pub use plugin::plugin_ui;
+    pub use task_viewer::task_viewer_ui;
+    pub use task_editor::task_editor_ui;
+}
+
 use crate::data::*;
 use crate::engine::TaskEngine;
 

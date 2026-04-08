@@ -1,13 +1,13 @@
 use egui::*;
 use egui_flex::*;
 
-use crate::icon;
-use crate::color;
+use super::icon;
+use super::color;
 use crate::engine::TaskEngine;
 use crate::worker::TaskStatus;
 
 use super::*;
-use super::common::ActionButton;
+use super::widget::ActionButton;
 
 pub fn dashboard_ui(
     flex: &mut FlexInstance,
@@ -34,7 +34,7 @@ fn task_card(
     status: TaskStatus,
     is_valid: bool,
     is_running: bool) {
-    let _ = common::card(ui, |ui| {
+    let _ = widget::card(ui, |ui| {
         Flex::horizontal()
             .w_full()
             .gap([4.0, 0.0].into())

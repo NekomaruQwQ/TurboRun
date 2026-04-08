@@ -7,7 +7,7 @@ use derive_setters::Setters;
 pub fn card<R, F>(ui: &mut Ui, body: F) -> R
 where
     F: FnOnce(&mut Ui) -> R {
-    use crate::color;
+    use super::color;
 
     Frame::new()
         .fill(color::CARD)

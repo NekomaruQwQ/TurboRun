@@ -1,8 +1,8 @@
 use egui::*;
 use egui_flex::*;
 
-use crate::color;
 use crate::engine::TaskEngine;
+use super::color;
 
 use super::*;
 
@@ -24,7 +24,7 @@ pub fn app_ui(
             Flex::vertical()
                 .w_full()
                 .gap(Vec2::new(4.0, 4.0))
-                .show(ui, |flex| nav_ui(flex, &mut view, page, engine))
+                .show(ui, |flex| nav::nav_ui(flex, &mut view, page, engine))
         });
 
     CentralPanel::default()
@@ -35,14 +35,14 @@ pub fn app_ui(
                         Flex::vertical()
                             .w_full()
                             .gap([8.0, 8.0].into())
-                            .show(ui, |flex| dashboard_ui(flex, &mut view, engine))
+                            .show(ui, |flex| page::dashboard_ui(flex, &mut view, engine))
                             .inner,
                     Page::Plugins =>
-                        plugins_ui(ui, &mut view, engine),
+                        page::plugin_ui(ui, &mut view, engine),
                     Page::TaskViewer(task_id) =>
-                        task_viewer_ui(ui, &mut view, engine, task_id),
+                        page::task_viewer_ui(ui, &mut view, engine, task_id),
                     Page::TaskEditor(ref mut task) =>
-                        task_editor_ui(
+                        page::task_editor_ui(
                             ui,
                             &mut view,
                             engine.plugins_sorted().collect::<Vec<_>>().as_slice(),

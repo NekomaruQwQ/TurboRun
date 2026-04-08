@@ -2,8 +2,8 @@ use std::time::SystemTime;
 
 use egui::*;
 
-use crate::color;
-use crate::icon;
+use super::color;
+use super::icon;
 use crate::data::*;
 use crate::data::Plugin;
 

@@ -2,9 +2,9 @@ use tap::prelude::*;
 use egui::*;
 use egui_flex::*;
 
-use crate::color;
+use super::color;
 use super::*;
-use super::common::ActionButton;
+use super::widget::ActionButton;
 
 pub fn nav_ui(
     flex: &mut FlexInstance,
