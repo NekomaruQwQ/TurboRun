@@ -18,7 +18,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
-        if let Some(action) = ui::app_ui(ui, &mut self.page, &mut self.engine) {
+        if let Some(action) = ui::app_ui(ui, &mut self.page, &self.engine) {
             self.on_action(action);
         }
     }
@@ -37,7 +37,6 @@ impl App {
             page: ui::Page::Dashboard,
         }
     }
-
 
     fn on_action(&mut self, action: ui::Action) {
         match action {

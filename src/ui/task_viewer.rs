@@ -1,134 +1,126 @@
 use egui::*;
 
 use crate::color;
-use crate::data::TaskId;
-use crate::engine::TaskEngine;
-use crate::icon;
 use crate::worker::TaskStatus;
 
+use super::*;
+
 #[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
-pub fn task_viewer_ui(ui: &mut Ui, engine: &mut TaskEngine, task_id: TaskId) -> super::PageResult {
-    // Phase 1: render UI using immutable access, collect interaction results.
-    let (did_start, did_stop) = {
-        let worker = engine.task(task_id).expect("task_id must be valid");
-        let task = worker.task();
-        let status = engine.task_status(task_id);
-        let is_running = worker.is_running();
-        let is_valid = engine.task_is_valid(task_id);
+pub fn task_viewer_ui(
+    ui: &mut Ui,
+    view: &mut ViewContext,
+    engine: &TaskEngine,
+    task_id: TaskId) {
+    let worker = engine.task(task_id).expect("task_id must be valid");
+    let task = worker.task();
+    let status = engine.task_status(task_id);
+    let is_running = worker.is_running();
+    let is_valid = engine.task_is_valid(task_id);
 
-        // — Heading + controls card —
-        let (did_start, did_stop) = card(ui, |ui| {
-            ui.heading(&task.name);
-            ui.horizontal(|ui| {
-                let s = ui.add_enabled(
-                    !is_running && is_valid,
-                    Button::new(format!("{}  Start", icon::PLAY))).clicked();
-                let t = ui.add_enabled(
-                    is_running,
-                    Button::new(format!("{}  Stop", icon::STOP))).clicked();
-                // ui.label(format_status(status));
-                (s, t)
-            }).inner
+    // — Heading + controls card —
+    card(ui, |ui| {
+        ui.heading(&task.name);
+        ui.horizontal(|ui| {
+            if ui.add_enabled(
+                !is_running && is_valid,
+                Button::new(format!("{}  Start", icon::PLAY))).clicked()
+            {
+                view.set_action(Action::RunTask(task_id));
+            }
+            if ui.add_enabled(
+                is_running,
+                Button::new(format!("{}  Stop", icon::STOP))).clicked()
+            {
+                view.set_action(Action::StopTask(task_id));
+            }
+            // ui.label(format_status(status));
         });
+    });
 
-        ui.add_space(8.0);
+    ui.add_space(8.0);
 
-        // — Fields card (readonly) —
-        card(ui, |ui| {
-            Grid::new("task_fields")
-                .num_columns(2)
-                .spacing([12.0, 4.0])
-                .show(ui, |ui| {
-                    ui.label("Command");
-                    ui.label(&task.command);
-                    ui.end_row();
+    // — Fields card (readonly) —
+    card(ui, |ui| {
+        Grid::new("task_fields")
+            .num_columns(2)
+            .spacing([12.0, 4.0])
+            .show(ui, |ui| {
+                ui.label("Command");
+                ui.label(&task.command);
+                ui.end_row();
 
-                    ui.label("Plugins");
-                    if task.plugins.is_empty() {
-                        ui.weak("(none)");
-                    } else {
-                        ui.vertical(|ui| {
-                            for inst in &task.plugins {
-                                if inst.vars.is_empty() {
-                                    ui.label(&inst.name);
-                                } else {
-                                    let vars = inst.vars
-                                        .iter()
-                                        .map(|&(ref k, ref v)| format!("{k}={v}"))
-                                        .collect::<Vec<_>>()
-                                        .join(", ");
-                                    ui.label(format!("{} ({})", inst.name, vars));
-                                }
+                ui.label("Plugins");
+                if task.plugins.is_empty() {
+                    ui.weak("(none)");
+                } else {
+                    ui.vertical(|ui| {
+                        for inst in &task.plugins {
+                            if inst.vars.is_empty() {
+                                ui.label(&inst.name);
+                            } else {
+                                let vars = inst.vars
+                                    .iter()
+                                    .map(|&(ref k, ref v)| format!("{k}={v}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                                ui.label(format!("{} ({})", inst.name, vars));
+                            }
+                        }
+                    });
+                }
+                ui.end_row();
+            });
+    });
+
+    ui.add_space(8.0);
+
+    // — stdout card —
+    let stdout = worker.stdout();
+    card(ui, |ui| {
+        CollapsingHeader::new(format!("stdout ({} lines)", stdout.len()))
+            .default_open(true)
+            .show(ui, |ui| {
+                if stdout.is_empty() {
+                    ui.weak("(no output)");
+                } else {
+                    ScrollArea::vertical()
+                        .id_salt("stdout_scroll")
+                        .max_height(160.0)
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            for line in stdout {
+                                ui.monospace(line);
                             }
                         });
-                    }
-                    ui.end_row();
-                });
-        });
+                }
+            });
+    });
 
-        ui.add_space(8.0);
+    ui.add_space(8.0);
 
-        // — stdout card —
-        let stdout = worker.stdout();
-        card(ui, |ui| {
-            CollapsingHeader::new(format!("stdout ({} lines)", stdout.len()))
-                .default_open(true)
-                .show(ui, |ui| {
-                    if stdout.is_empty() {
-                        ui.weak("(no output)");
-                    } else {
-                        ScrollArea::vertical()
-                            .id_salt("stdout_scroll")
-                            .max_height(160.0)
-                            .stick_to_bottom(true)
-                            .show(ui, |ui| {
-                                for line in stdout {
-                                    ui.monospace(line);
-                                }
-                            });
-                    }
-                });
-        });
-
-        ui.add_space(8.0);
-
-        // — stderr card —
-        let stderr = worker.stderr();
-        // Auto-expand stderr when it has content, since non-empty stderr usually
-        // signals an error worth surfacing immediately.
-        card(ui, |ui| {
-            CollapsingHeader::new(format!("stderr ({} lines)", stderr.len()))
-                .default_open(!stderr.is_empty())
-                .show(ui, |ui| {
-                    if stderr.is_empty() {
-                        ui.weak("(no output)");
-                    } else {
-                        ScrollArea::vertical()
-                            .id_salt("stderr_scroll")
-                            .max_height(160.0)
-                            .stick_to_bottom(true)
-                            .show(ui, |ui| {
-                                for line in stderr {
-                                    ui.monospace(line);
-                                }
-                            });
-                    }
-                });
-        });
-
-        (did_start, did_stop)
-    };
-
-    // Phase 2: mutations (immutable borrow is now released).
-    if did_start {
-        engine.run_task(task_id)
-            .unwrap_or_else(|err| log::error!("run_task failed: {err:?}"));
-    }
-    if did_stop {
-        engine.stop_task(task_id);
-    }
-
-    (None, None)
+    // — stderr card —
+    let stderr = worker.stderr();
+    // Auto-expand stderr when it has content, since non-empty stderr usually
+    // signals an error worth surfacing immediately.
+    card(ui, |ui| {
+        CollapsingHeader::new(format!("stderr ({} lines)", stderr.len()))
+            .default_open(!stderr.is_empty())
+            .show(ui, |ui| {
+                if stderr.is_empty() {
+                    ui.weak("(no output)");
+                } else {
+                    ScrollArea::vertical()
+                        .id_salt("stderr_scroll")
+                        .max_height(160.0)
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            for line in stderr {
+                                ui.monospace(line);
+                            }
+                        });
+                }
+            });
+    });
 }
 
 /// Wraps a UI section in a PWA-style "card": rounded, padded, painted with

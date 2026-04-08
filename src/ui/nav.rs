@@ -2,25 +2,23 @@ use tap::prelude::*;
 use egui::*;
 use egui_flex::*;
 
+use crate::color;
 use super::*;
 use super::common::ActionButton;
 
 pub fn nav_ui(
-    flex: &mut egui_flex::FlexInstance,
+    flex: &mut FlexInstance,
+    view: &mut ViewContext,
     page: &Page,
-    engine: &TaskEngine)
- -> PageResult {
-    let mut action = None;
-    let mut next_page = None;
-
+    engine: &TaskEngine) {
     flex.add(
         item(),
         Button::new("")
-            .left_text(format!("{} Dashboard", ""))
-            .selected(page == &Page::Dashboard))
+            .left_text(format!("{}  Dashboard", icon::HOME))
+            .selected(matches!(page, Page::Dashboard)))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| next_page = Some(Page::Dashboard));
+        .then(|| view.set_navigation(Page::Dashboard));
     flex.add_flex(
         item(),
         Flex::horizontal()
@@ -31,15 +29,15 @@ pub fn nav_ui(
             flex.add(
                 item().grow(1.0),
                 Button::new("")
-                    .left_text(format!("{} Plugins", ""))
+                    .left_text(format!("{}  Plugins", icon::PLUGIN))
                     .right_text(
                         RichText::new(format!("{plugin_count} loaded"))
                             .small()
                             .weak())
-                    .selected(page == &Page::Plugins))
+                    .selected(matches!(page, Page::Plugins)))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
-                .then(|| next_page = Some(Page::Plugins));
+                .then(|| view.set_navigation(Page::Plugins));
             flex.add(
                 item(),
                 ActionButton::new()
@@ -47,7 +45,7 @@ pub fn nav_ui(
                     .tooltip("View Plugins"))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
-                .then(|| action = Some(Action::RefreshPlugins));
+                .then(|| view.set_action(Action::RefreshPlugins));
         });
 
     // This is a more "polite" implementation of a separator that
@@ -61,7 +59,7 @@ pub fn nav_ui(
         ui.painter().hline(
             rect.x_range(),
             rect.center().y,
-            Stroke::new(1.0, theme::COLOR_BORDER));
+            Stroke::new(1.0, color::BORDER));
     });
 
     let is_editing_new_task =
@@ -69,11 +67,11 @@ pub fn nav_ui(
     flex.add(
         item(),
         Button::new("")
-            .left_text(format!("{}  New Task", icon::PLUS))
+            .left_text(format!("{}  New Task", icon::CREATE))
             .selected(is_editing_new_task))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| next_page = Some(Page::TaskEditor(engine.empty_task())));
+        .then(|| view.set_navigation(Page::TaskEditor(engine.empty_task())));
 
     flex.add_ui(item().grow(1.0), |ui| {
         ScrollArea::vertical().show(ui, |ui| {
@@ -84,21 +82,19 @@ pub fn nav_ui(
                     for worker in engine.tasks_sorted() {
                         nav_task_ui(
                             flex,
+                            view,
                             page,
-                            &mut next_page,
                             worker.task());
                     }
                 });
         });
     });
-
-    (action, next_page)
 }
 
 fn nav_task_ui(
     flex: &mut FlexInstance,
+    view: &mut ViewContext,
     page: &Page,
-    next_page: &mut Option<Page>,
     task: &Task) {
     let task_selected =
         matches!(page, Page::TaskViewer(id) if *id == task.id) |
@@ -118,16 +114,16 @@ fn nav_task_ui(
                     .selected(task_selected))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
-                .then(|| *next_page = Some(Page::TaskViewer(task.id)));
+                .then(|| view.set_navigation(Page::TaskViewer(task.id)));
             flex.add(
                 item(),
                 ActionButton::new()
-                    .icon(icon::PENCIL)
+                    .icon(icon::EDIT)
                     .tooltip("Edit Task")
                     .selected(task_editor_selected))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
                 .pipe(|clicked| clicked && !task_editor_selected)
-                .then(|| *next_page = Some(Page::TaskEditor(task.clone())));
+                .then(|| view.set_navigation(Page::TaskEditor(task.clone())));
         });
 }

@@ -1,70 +1,63 @@
 use egui::*;
 use egui_flex::*;
 
-use crate::color;
 use crate::icon;
+use crate::color;
 use crate::engine::TaskEngine;
 use crate::worker::TaskStatus;
 
 use super::*;
 use super::common::ActionButton;
 
-pub fn dashboard_ui(flex: &mut FlexInstance, engine: &TaskEngine) -> PageResult {
-    let mut outer_action = None;
-    let mut outer_next_page = None;
-
+pub fn dashboard_ui(
+    flex: &mut FlexInstance,
+    page: &mut ViewContext,
+    engine: &TaskEngine) {
     for worker in engine.tasks_sorted() {
         let task_id = worker.task().id;
-
         flex.add_ui(item().grow(1.0), |ui| {
-            let (action, next_page) =
-                task_card(
-                    ui,
-                    worker.task(),
-                    engine.task_status(task_id),
-                    worker.is_running(),
-                    engine.task_is_valid(task_id));
-            if let Some(action) = action {
-                outer_action = Some(action);
-            }
-            if let Some(next_page) = next_page {
-                outer_next_page = Some(next_page);
-            }
+            task_card(
+                ui,
+                page,
+                worker.task(),
+                engine.task_status(task_id),
+                engine.task_is_valid(task_id),
+                worker.is_running());
         });
     }
-
-    (outer_action, outer_next_page)
 }
 
 fn task_card(
     ui: &mut Ui,
+    page: &mut ViewContext,
     task: &Task,
     status: TaskStatus,
-    is_running: bool,
-    is_valid: bool)
- -> (Option<Action>, Option<Page>) {
-    common::card(ui, |ui| {
+    is_valid: bool,
+    is_running: bool) {
+    let _ = common::card(ui, |ui| {
         Flex::horizontal()
             .w_full()
             .gap([4.0, 0.0].into())
             .align_items(FlexAlign::Center)
             .show(ui, |flex| {
-                task_card_content(flex, task, status, is_running, is_valid)
+                task_card_content(
+                    flex,
+                    page,
+                    task,
+                    status,
+                    is_valid,
+                    is_running);
             })
-            .inner
-    })
+    });
 }
 
 fn task_card_content(
     flex: &mut FlexInstance,
+    page: &mut ViewContext,
     task: &Task,
     status: TaskStatus,
-    is_running: bool,
-    is_valid: bool)
- -> (Option<Action>, Option<Page>) {
-    let mut action = None;
-    let mut next_page = None;
-
+    is_valid: bool,
+    is_running: bool) {
     let status_ui =
         match status {
             TaskStatus::Invalid =>
@@ -88,7 +81,7 @@ fn task_card_content(
                 .enabled(!is_running && is_valid))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| action = Some(Action::RunTask(task.id)));
+        .then(|| page.set_action(Action::RunTask(task.id)));
 
     // Stop — disabled when not running.
     flex.add(
@@ -99,7 +92,7 @@ fn task_card_content(
                 .enabled(is_running))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| action = Some(Action::StopTask(task.id)));
+        .then(|| page.set_action(Action::StopTask(task.id)));
 
     // Task name + status. Clicking anywhere on this opens the task viewer.
     flex
@@ -111,18 +104,16 @@ fn task_card_content(
                 .truncate())
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| next_page = Some(Page::TaskViewer(task.id)));
+        .then(|| page.set_navigation(Page::TaskViewer(task.id)));
 
     // Edit — disabled when running.
     flex
         .add(item(),
             ActionButton::new()
-                .icon(icon::PENCIL)
+                .icon(icon::EDIT)
                 .tooltip("Edit")
                 .enabled(!is_running))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| next_page = Some(Page::TaskEditor(task.clone())));
-
-    (action, next_page)
+        .then(|| page.set_navigation(Page::TaskEditor(task.clone())));
 }

@@ -1,56 +1,15 @@
 #![expect(clippy::large_include_file, reason = "embedded fonts")]
 
+mod color;
+mod style;
+mod icon;
 mod util;
 mod data;
 mod plugin;
 mod worker;
 mod engine;
-mod theme;
 mod ui;
 mod app;
-
-mod color {
-    use egui::Color32;
-
-    pub const RED: Color32 =
-        Color32::from_rgb(0xE0, 0x6C, 0x75);
-    pub const ORANGE: Color32 =
-        Color32::from_rgb(0xD1, 0x9A, 0x66);
-    pub const YELLOW: Color32 =
-        Color32::from_rgb(0xE5, 0xC0, 0x7B);
-    pub const GREEN: Color32 =
-        Color32::from_rgb(0x98, 0xC3, 0x79);
-    pub const CYAN: Color32 =
-        Color32::from_rgb(0x56, 0xB6, 0xC2);
-    pub const BLUE: Color32 =
-        Color32::from_rgb(0x61, 0xAF, 0xEF);
-    pub const PURPLE: Color32 =
-        Color32::from_rgb(0xC6, 0x78, 0xDD);
-}
-
-/// Font Awesome glyphs from UbuntuMono Nerd Font, available app-wide via the
-/// font fallback installed in [`setup_fonts`]. Names mirror Nerd Fonts'
-/// `nf-fa-*` cheatsheet entries; codepoints sit in the BMP Private Use Area
-/// (U+F000–U+F8FF) so each constant is a single 3-byte UTF-8 sequence and
-/// can be passed anywhere a `&str` label is expected.
-mod icon {
-    // playback / lifecycle
-    pub const PLAY:         &str = "\u{F04B}"; // nf-fa-play
-    pub const STOP:         &str = "\u{F04D}"; // nf-fa-stop
-    pub const REFRESH:      &str = "\u{F021}"; // nf-fa-refresh
-
-    // editing / structural
-    pub const PENCIL:       &str = "\u{F040}"; // nf-fa-pencil
-    pub const PLUS:         &str = "\u{F067}"; // nf-fa-plus
-    pub const TIMES:        &str = "\u{F00D}"; // nf-fa-times
-    pub const ARROW_UP:     &str = "\u{F062}"; // nf-fa-arrow_up
-    pub const ARROW_DOWN:   &str = "\u{F063}"; // nf-fa-arrow_down
-
-    // domain
-    pub const SAVE:         &str = "\u{F0C7}"; // nf-fa-floppy_o
-    pub const TRASH:        &str = "\u{F1F8}"; // nf-fa-trash
-    pub const PUZZLE_PIECE: &str = "\u{F12E}"; // nf-fa-puzzle_piece
-}
 
 #[derive(clap::Parser)]
 struct Args {
@@ -74,7 +33,6 @@ struct Args {
 }
 
 fn main() -> eframe::Result {
-
     use egui::*;
     use eframe::*;
 
@@ -93,12 +51,15 @@ fn main() -> eframe::Result {
             centered: true,
             ..NativeOptions::default()
         },
-        Box::new(|cc| {
-            let egui = &cc.egui_ctx;
+        Box::new(|&CreationContext { egui_ctx: ref egui, .. }| {
+            use crate::app::App;
+            use crate::style::setup_style;
+
             egui.set_zoom_factor(1.25);
             setup_fonts(egui);
-            theme::setup_style(egui);
-            Ok(Box::new(app::App::new()))
+            setup_style(egui);
+
+            Ok(Box::new(App::new()))
         }))
 }
 

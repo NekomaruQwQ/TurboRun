@@ -1,15 +1,12 @@
 use egui::*;
 
-use crate::engine::TaskEngine;
-use crate::icon;
+use super::*;
 
-pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) -> super::PageResult {
-    let mut refresh = false;
-
+pub fn plugins_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
     ui
         .button(format!("{}  Reload Plugins", icon::REFRESH))
         .clicked()
-        .then(|| refresh = true);
+        .then(|| view.set_action(Action::RefreshPlugins));
 
     ui.add_space(10.0);
 
@@ -17,7 +14,7 @@ pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) -> super::PageResult {
         for plugin in engine.plugins_sorted() {
             let header = RichText::new(format!(
                 "{}  {}",
-                icon::PUZZLE_PIECE,
+                icon::PLUGIN,
                 plugin.name)).monospace();
             let source =
                 RichText::new(plugin.source.trim_end())
@@ -29,6 +26,4 @@ pub fn plugins_ui(ui: &mut Ui, engine: &mut TaskEngine) -> super::PageResult {
             });
         }
     });
-
-    (refresh.then_some(super::Action::RefreshPlugins), None)
 }

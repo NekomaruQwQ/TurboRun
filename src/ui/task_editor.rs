@@ -3,15 +3,16 @@ use std::time::SystemTime;
 use egui::*;
 
 use crate::color;
+use crate::icon;
 use crate::data::*;
 use crate::data::Plugin;
-use crate::icon;
 
 use super::*;
 
-/// Renders the task editor page for `editor` and returns the user's intent
-/// for this frame. The caller is responsible for performing any engine-side
-/// mutations (insert / replace / remove + `save_config`) afterwards.
+/// Renders the task editor page for `editor` and reports the user's intent
+/// for this frame via `page`. The caller is responsible for performing any
+/// engine-side mutations (insert / replace / remove + `save_config`) when
+/// the action is later applied.
 ///
 /// `is_existing` controls the heading and whether the Delete button is shown.
 /// It is computed by the caller because we hold no mutable borrow of `engine`
@@ -19,10 +20,10 @@ use super::*;
 #[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
 pub fn task_editor_ui(
     ui: &mut Ui,
+    view: &mut ViewContext,
     plugins: &[&Plugin],
     task: &mut Task,
-    is_existing: bool)
- -> PageResult {
+    is_existing: bool) {
     ui.separator();
 
     // — Action row —
@@ -35,54 +36,54 @@ pub fn task_editor_ui(
         !task.name.trim().is_empty() &&
         !task.command.trim().is_empty();
 
-    let action = ui.horizontal(|ui| {
+    // Copied out so the inner `with_layout` closure can reference the id
+    // without re-borrowing `task` (which the outer closure already holds
+    // mutably for `last_modified` / `clone`).
+    let task_id = task.id;
+
+    ui.horizontal(|ui| {
         if ui.add_enabled(valid, Button::new(format!("{}  Save", icon::SAVE))).clicked() {
             task.last_modified = SystemTime::now();
-            return (
-                Some(Action::SaveTask(task.clone())),
-                Some(Page::TaskViewer(task.id)));
+            view.set_action(Action::SaveTask(task.clone()));
+            view.set_navigation(Page::TaskViewer(task_id));
         }
 
-        if ui.button(format!("{}  Cancel", icon::TIMES)).clicked() {
-            return (
-                None,
-                Some(if is_existing {
-                    Page::TaskViewer(task.id)
-                } else {
-                    Page::Dashboard
-                }));
+        if ui.button(format!("{}  Cancel", icon::CLOSE)).clicked() {
+            view.set_navigation(if is_existing {
+                Page::TaskViewer(task_id)
+            } else {
+                Page::Dashboard
+            });
         }
 
-        let mut result = (None, None);
         if is_existing {
             // Right-aligned two-click delete confirm. State is stashed in
             // egui memory keyed by task id so it survives across frames but
             // is automatically cleared the next time `Memory` is wiped (i.e.
             // never within a session — we explicitly clear on commit).
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let confirm_id = Id::new(("edit_task_delete_confirm", task.id));
+                let confirm_id = Id::new(("edit_task_delete_confirm", task_id));
                 let armed: bool = ui
                     .data_mut(|d| d.get_temp::<bool>(confirm_id))
                     .unwrap_or(false);
 
                 let label = if armed {
-                    RichText::new(format!("{}  Delete?", icon::TRASH)).color(color::RED)
+                    RichText::new(format!("{}  Delete?", icon::DELETE)).color(color::RED)
                 } else {
-                    RichText::new(format!("{}  Delete", icon::TRASH))
+                    RichText::new(format!("{}  Delete", icon::DELETE))
                 };
                 if ui.button(label).clicked() {
                     if armed {
                         ui.data_mut(|d| d.remove::<bool>(confirm_id));
-                        result = (Some(Action::DeleteTask(task.id)), Some(Page::Dashboard));
+                        view.set_action(Action::DeleteTask(task_id));
+                        view.set_navigation(Page::Dashboard);
                     } else {
                         ui.data_mut(|d| d.insert_temp(confirm_id, true));
                     }
                 }
             });
         }
-
-        result
-    }).inner;
+    });
 
     ui.separator();
 
@@ -115,7 +116,7 @@ pub fn task_editor_ui(
 
     ui.horizontal(|ui| {
         ui.label("Plugins");
-        if ui.small_button(format!("{}  Add plugin", icon::PLUS)).clicked() {
+        if ui.small_button(format!("{}  Add plugin", icon::CREATE)).clicked() {
             // Default to the first available plugin name; if none are loaded
             // we still let the user add a row, which will surface as missing
             // and prompt them to fix the plugin directory / config.
@@ -151,13 +152,13 @@ pub fn task_editor_ui(
                             }
                         });
 
-                    if ui.small_button(icon::ARROW_UP).on_hover_text("Move up").clicked() {
+                    if ui.small_button(icon::UP).on_hover_text("Move up").clicked() {
                         to_move_up = Some(idx);
                     }
-                    if ui.small_button(icon::ARROW_DOWN).on_hover_text("Move down").clicked() {
+                    if ui.small_button(icon::DOWN).on_hover_text("Move down").clicked() {
                         to_move_down = Some(idx);
                     }
-                    if ui.small_button(icon::TIMES).on_hover_text("Remove plugin").clicked() {
+                    if ui.small_button(icon::CLOSE).on_hover_text("Remove plugin").clicked() {
                         to_remove_plugin = Some(idx);
                     }
                 });
@@ -175,14 +176,14 @@ pub fn task_editor_ui(
                                 TextEdit::singleline(value)
                                     .hint_text("value")
                                     .desired_width(180.0));
-                            if ui.small_button(icon::TIMES).on_hover_text("Remove var").clicked() {
+                            if ui.small_button(icon::CLOSE).on_hover_text("Remove var").clicked() {
                                 to_remove_var = Some((idx, row_idx));
                             }
                         });
                     });
                 }
 
-                if ui.small_button(format!("{}  Add var", icon::PLUS)).clicked() {
+                if ui.small_button(format!("{}  Add var", icon::CREATE)).clicked() {
                     to_add_var = Some(idx);
                 }
             });
@@ -211,6 +212,4 @@ pub fn task_editor_ui(
     if let Some((i, j)) = to_remove_var {
         task.plugins[i].vars.remove(j);
     }
-
-    action
 }

@@ -4,13 +4,13 @@ use egui::*;
 use egui_flex::*;
 use derive_setters::Setters;
 
-use crate::theme::*;
-
 pub fn card<R, F>(ui: &mut Ui, body: F) -> R
 where
     F: FnOnce(&mut Ui) -> R {
+    use crate::color;
+
     Frame::new()
-        .fill(COLOR_CARD)
+        .fill(color::CARD)
         .corner_radius(6.0)
         .inner_margin(Margin::same(4))
         .show(ui, body)
