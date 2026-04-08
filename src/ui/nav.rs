@@ -14,7 +14,7 @@ pub fn nav_ui(
     flex.add(
         item(),
         Button::new("")
-            .left_text(format!("{}  Dashboard", icon::HOME))
+            .left_text(format!("{}  Dashboard", nf::md::MD_MONITOR_DASHBOARD))
             .selected(matches!(page, Page::Dashboard)))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
@@ -29,7 +29,7 @@ pub fn nav_ui(
             flex.add(
                 item().grow(1.0),
                 Button::new("")
-                    .left_text(format!("{}  Plugins", icon::PLUGIN))
+                    .left_text(format!("{}  Plugins", nf::fa::FA_PUZZLE_PIECE))
                     .right_text(
                         RichText::new(format!("{plugin_count} loaded"))
                             .small()
@@ -41,7 +41,7 @@ pub fn nav_ui(
             flex.add(
                 item(),
                 ActionButton::new()
-                    .icon(icon::REFRESH)
+                    .icon(nf::fa::FA_ARROWS_ROTATE)
                     .tooltip("View Plugins"))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
@@ -67,7 +67,7 @@ pub fn nav_ui(
     flex.add(
         item(),
         Button::new("")
-            .left_text(format!("{}  New Task", icon::CREATE))
+            .left_text(format!("{}  New Task", nf::fa::FA_PLUS))
             .selected(is_editing_new_task))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
@@ -118,7 +118,7 @@ fn nav_task_ui(
             flex.add(
                 item(),
                 ActionButton::new()
-                    .icon(icon::EDIT)
+                    .icon(nf::fa::FA_PEN)
                     .tooltip("Edit Task")
                     .selected(task_editor_selected))
                 .on_hover_cursor(CursorIcon::PointingHand)

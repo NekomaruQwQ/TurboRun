@@ -1,7 +1,6 @@
 use egui::*;
 use egui_flex::*;
 
-use super::icon;
 use super::color;
 use crate::engine::TaskEngine;
 use crate::worker::TaskStatus;
@@ -76,7 +75,7 @@ fn task_card_content(
     flex.add(
             item(),
             ActionButton::new()
-                .icon(icon::PLAY)
+                .icon(nf::fa::FA_PLAY)
                 .tooltip("Run Task")
                 .enabled(!is_running && is_valid))
         .on_hover_cursor(CursorIcon::PointingHand)
@@ -87,7 +86,7 @@ fn task_card_content(
     flex.add(
             item(),
             ActionButton::new()
-                .icon(icon::STOP)
+                .icon(nf::fa::FA_STOP)
                 .tooltip("Stop Task")
                 .enabled(is_running))
         .on_hover_cursor(CursorIcon::PointingHand)
@@ -110,7 +109,7 @@ fn task_card_content(
     flex
         .add(item(),
             ActionButton::new()
-                .icon(icon::EDIT)
+                .icon(nf::fa::FA_PEN)
                 .tooltip("Edit")
                 .enabled(!is_running))
         .on_hover_cursor(CursorIcon::PointingHand)

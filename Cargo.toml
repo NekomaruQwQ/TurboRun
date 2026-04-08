@@ -21,6 +21,7 @@ euclid = "0.22.14"
 fastrand = "2.4.0"
 itertools = "0.14.0"
 log = "0.4.29"
+nerd-font-symbols = "0.3.0"
 pretty_env_logger = "0.5.0"
 serde = { version = "1.0", features = ["derive"] }
 tap = "1.0.1"

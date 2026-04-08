@@ -1,5 +1,7 @@
 #![expect(clippy::large_include_file, reason = "embedded fonts")]
 
+extern crate nerd_font_symbols as nf;
+
 mod util;
 mod data;
 mod plugin;

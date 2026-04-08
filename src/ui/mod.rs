@@ -3,7 +3,6 @@ pub use style::setup_style;
 
 mod color;
 mod style;
-mod icon;
 mod widget;
 
 mod app;

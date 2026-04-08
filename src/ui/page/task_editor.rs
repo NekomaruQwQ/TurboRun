@@ -3,7 +3,6 @@ use std::time::SystemTime;
 use egui::*;
 
 use super::color;
-use super::icon;
 use crate::data::*;
 use crate::data::Plugin;
 
@@ -42,13 +41,13 @@ pub fn task_editor_ui(
     let task_id = task.id;
 
     ui.horizontal(|ui| {
-        if ui.add_enabled(valid, Button::new(format!("{}  Save", icon::SAVE))).clicked() {
+        if ui.add_enabled(valid, Button::new(format!("{}  Save", nf::fa::FA_FLOPPY_DISK))).clicked() {
             task.last_modified = SystemTime::now();
             view.set_action(Action::SaveTask(task.clone()));
             view.set_navigation(Page::TaskViewer(task_id));
         }
 
-        if ui.button(format!("{}  Cancel", icon::CLOSE)).clicked() {
+        if ui.button(format!("{}  Cancel", nf::fa::FA_XMARK)).clicked() {
             view.set_navigation(if is_existing {
                 Page::TaskViewer(task_id)
             } else {
@@ -68,9 +67,9 @@ pub fn task_editor_ui(
                     .unwrap_or(false);
 
                 let label = if armed {
-                    RichText::new(format!("{}  Delete?", icon::DELETE)).color(color::RED)
+                    RichText::new(format!("{}  Delete?", nf::fa::FA_TRASH)).color(color::RED)
                 } else {
-                    RichText::new(format!("{}  Delete", icon::DELETE))
+                    RichText::new(format!("{}  Delete", nf::fa::FA_TRASH))
                 };
                 if ui.button(label).clicked() {
                     if armed {
@@ -116,7 +115,7 @@ pub fn task_editor_ui(
 
     ui.horizontal(|ui| {
         ui.label("Plugins");
-        if ui.small_button(format!("{}  Add plugin", icon::CREATE)).clicked() {
+        if ui.small_button(format!("{}  Add plugin", nf::fa::FA_PLUS)).clicked() {
             // Default to the first available plugin name; if none are loaded
             // we still let the user add a row, which will surface as missing
             // and prompt them to fix the plugin directory / config.
@@ -152,13 +151,13 @@ pub fn task_editor_ui(
                             }
                         });
 
-                    if ui.small_button(icon::UP).on_hover_text("Move up").clicked() {
+                    if ui.small_button(nf::fa::FA_ARROW_UP).on_hover_text("Move up").clicked() {
                         to_move_up = Some(idx);
                     }
-                    if ui.small_button(icon::DOWN).on_hover_text("Move down").clicked() {
+                    if ui.small_button(nf::fa::FA_ARROW_DOWN).on_hover_text("Move down").clicked() {
                         to_move_down = Some(idx);
                     }
-                    if ui.small_button(icon::CLOSE).on_hover_text("Remove plugin").clicked() {
+                    if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove plugin").clicked() {
                         to_remove_plugin = Some(idx);
                     }
                 });
@@ -176,14 +175,14 @@ pub fn task_editor_ui(
                                 TextEdit::singleline(value)
                                     .hint_text("value")
                                     .desired_width(180.0));
-                            if ui.small_button(icon::CLOSE).on_hover_text("Remove var").clicked() {
+                            if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove var").clicked() {
                                 to_remove_var = Some((idx, row_idx));
                             }
                         });
                     });
                 }
 
-                if ui.small_button(format!("{}  Add var", icon::CREATE)).clicked() {
+                if ui.small_button(format!("{}  Add var", nf::fa::FA_PLUS)).clicked() {
                     to_add_var = Some(idx);
                 }
             });

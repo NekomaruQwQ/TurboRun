@@ -23,13 +23,13 @@ pub fn task_viewer_ui(
         ui.horizontal(|ui| {
             if ui.add_enabled(
                 !is_running && is_valid,
-                Button::new(format!("{}  Start", icon::PLAY))).clicked()
+                Button::new(format!("{}  Start", nf::fa::FA_PLAY))).clicked()
             {
                 view.set_action(Action::RunTask(task_id));
             }
             if ui.add_enabled(
                 is_running,
-                Button::new(format!("{}  Stop", icon::STOP))).clicked()
+                Button::new(format!("{}  Stop", nf::fa::FA_STOP))).clicked()
             {
                 view.set_action(Action::StopTask(task_id));
             }

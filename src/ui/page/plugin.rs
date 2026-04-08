@@ -4,7 +4,7 @@ use super::*;
 
 pub fn plugin_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
     ui
-        .button(format!("{}  Reload Plugins", icon::REFRESH))
+        .button(format!("{}  Reload Plugins", nf::fa::FA_ARROWS_ROTATE))
         .clicked()
         .then(|| view.set_action(Action::RefreshPlugins));
 
@@ -14,7 +14,7 @@ pub fn plugin_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
         for plugin in engine.plugins_sorted() {
             let header = RichText::new(format!(
                 "{}  {}",
-                icon::PLUGIN,
+                nf::fa::FA_PUZZLE_PIECE,
                 plugin.name)).monospace();
             let source =
                 RichText::new(plugin.source.trim_end())
