@@ -15,6 +15,7 @@ features = ["glow"]
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.6.0", features = ["derive", "env"] }
+derive_setters = "0.1.9"
 egui_flex = "0.6.0"
 euclid = "0.22.14"
 fastrand = "2.4.0"

@@ -1,5 +1,7 @@
-mod widget;
+mod common;
 
+mod nav;
+use nav::nav_ui;
 mod dashboard;
 use dashboard::dashboard_ui;
 mod plugin;
@@ -107,92 +109,4 @@ pub fn app_ui(
         });
 
     final_action
-}
-
-fn nav_ui(
-    flex: &mut egui_flex::FlexInstance,
-    page: &Page,
-    engine: &TaskEngine)
- -> PageResult {
-    use egui::*;
-    use egui_flex::*;
-
-    let mut action = None;
-    let mut next_page = None;
-
-    flex.add(
-        item(),
-        Button::new("")
-            .left_text(format!("{} Dashboard", ""))
-            .selected(page == &Page::Dashboard))
-        .clicked()
-        .then(|| next_page = Some(Page::Dashboard));
-    flex.add_flex(
-        item(),
-        Flex::horizontal()
-            .w_full()
-            .gap([4.0, 4.0].into()),
-        |flex| {
-            flex.add(
-                item().grow(1.0),
-                Button::new("")
-                    .left_text(format!("{} Plugins", ""))
-                    .selected(page == &Page::Plugins))
-                .clicked()
-                .then(|| next_page = Some(Page::Plugins));
-            flex.add_ui(item(), |ui| {
-                widget::action_button(ui, true, icon::REFRESH, "Refresh Plugins")
-                    .clicked()
-                    .then(|| action = Some(Action::RefreshPlugins));
-            });
-        });
-
-    // This is a more "polite" implementation of a separator that
-    // does not try to consume all available width (which would
-    // cause unwanted stretching of the side panel and its contents).
-    flex.add_ui(item(), |ui| {
-        let (rect, _) =
-            ui.allocate_exact_size(
-                Vec2::new(ui.available_width(), 1.0),
-                Sense::hover());
-        ui.painter().hline(
-            rect.x_range(),
-            rect.center().y,
-            Stroke::new(1.0, theme::COLOR_BORDER));
-    });
-
-    flex.add(
-        item(),
-        Button::new("")
-            .left_text(format!("{}  New Task", icon::PLUS)))
-        .clicked()
-        .then(|| next_page = Some(Page::TaskEditor(engine.empty_task())));
-
-    for worker in engine.tasks_sorted() {
-        let task = worker.task();
-
-        flex.add_flex(
-            item(),
-            Flex::horizontal()
-                .w_full()
-                .gap([4.0, 4.0].into()),
-            |flex| {
-                flex.add(
-                    item().grow(1.0),
-                    Button::new("")
-                        .left_text(&task.name)
-                        .selected(page == &Page::TaskViewer(task.id)))
-                    .clicked()
-                    .then(|| next_page = Some(Page::TaskViewer(task.id)));
-                flex.add_ui(
-                    item(),
-                    |ui| {
-                        widget::action_button(ui, true, icon::PENCIL, "Edit Task")
-                            .clicked()
-                            .then(|| next_page = Some(Page::TaskEditor(task.clone())));
-                });
-            });
-    }
-
-    (action, next_page)
 }

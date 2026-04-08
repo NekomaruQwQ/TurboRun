@@ -7,6 +7,7 @@ use crate::engine::TaskEngine;
 use crate::worker::TaskStatus;
 
 use super::*;
+use super::common::ActionButton;
 
 pub fn dashboard_ui(flex: &mut FlexInstance, engine: &TaskEngine) -> PageResult {
     let mut outer_action = None;
@@ -42,7 +43,7 @@ fn task_card(
     is_running: bool,
     is_valid: bool)
  -> (Option<Action>, Option<Page>) {
-    widget::card(ui, |ui| {
+    common::card(ui, |ui| {
         Flex::horizontal()
             .w_full()
             .gap([4.0, 0.0].into())
@@ -79,44 +80,28 @@ fn task_card_content(
         }.small();
 
     // Run — disabled while already running or invalid.
-    flex
-        .add_ui(item(), |ui| {
-           widget::action_button(
-                ui,
-                !is_running && is_valid,
-                icon::PLAY,
-                "Run")
-        })
-        .inner
+    flex.add(
+            item(),
+            ActionButton::new()
+                .icon(icon::PLAY)
+                .tooltip("Run Task")
+                .enabled(!is_running && is_valid))
+        .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
         .then(|| action = Some(Action::RunTask(task.id)));
 
     // Stop — disabled when not running.
-    flex
-        .add_ui(item(), |ui| {
-            widget::action_button(
-                ui,
-                is_running,
-                icon::STOP,
-                "Stop")
-        })
-        .inner
+    flex.add(
+            item(),
+            ActionButton::new()
+                .icon(icon::STOP)
+                .tooltip("Stop Task")
+                .enabled(is_running))
+        .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
         .then(|| action = Some(Action::StopTask(task.id)));
 
-    // Edit — disabled when running.
-    flex
-        .add_ui(item(), |ui| {
-            widget::action_button(
-                ui,
-                !is_running,
-                icon::PENCIL,
-                "Edit")
-        })
-        .inner
-        .clicked()
-        .then(|| next_page = Some(Page::TaskEditor(task.clone())));
-
+    // Task name + status. Clicking anywhere on this opens the task viewer.
     flex
         .add(
             item().grow(1.0),
@@ -124,8 +109,20 @@ fn task_card_content(
                 .left_text(&task.name)
                 .right_text(status_ui)
                 .truncate())
+        .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
         .then(|| next_page = Some(Page::TaskViewer(task.id)));
+
+    // Edit — disabled when running.
+    flex
+        .add(item(),
+            ActionButton::new()
+                .icon(icon::PENCIL)
+                .tooltip("Edit")
+                .enabled(!is_running))
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .clicked()
+        .then(|| next_page = Some(Page::TaskEditor(task.clone())));
 
     (action, next_page)
 }

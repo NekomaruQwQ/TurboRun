@@ -60,13 +60,13 @@ impl TaskEngine {
         &self.plugin_dir
     }
 
-    pub fn tasks_sorted(&self) -> impl Iterator<Item = &TaskWorker> {
+    pub fn tasks_sorted(&self) -> impl ExactSizeIterator<Item = &TaskWorker> {
         self.tasks
             .values()
             .sorted_by_key(|worker| &worker.task().name)
     }
 
-    pub fn plugins_sorted(&self) -> impl Iterator<Item = &Plugin> {
+    pub fn plugins_sorted(&self) -> impl ExactSizeIterator<Item = &Plugin> {
         self.plugins
             .values()
             .sorted_by_key(|plugin| &plugin.name)
