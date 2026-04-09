@@ -15,10 +15,35 @@ use crate::plugin::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TaskStatus {
     Invalid,
+    None,
     Stopped,
     Running,
     Success,
     Failure,
+}
+
+impl TaskStatus {
+    pub const fn can_start(self) -> bool {
+        matches!(
+            self,
+            Self::None |
+            Self::Stopped |
+            Self::Success |
+            Self::Failure)
+    }
+
+    pub const fn can_stop(self) -> bool {
+        matches!(self, Self::Running)
+    }
+
+    pub const fn can_edit(self) -> bool {
+        matches!(
+            self,
+            Self::None |
+            Self::Stopped |
+            Self::Success |
+            Self::Failure)
+    }
 }
 
 pub struct TaskWorker {
@@ -78,7 +103,7 @@ impl TaskWorker {
                 None => TaskStatus::Stopped, // Process was killed or terminated by signal
             }
         } else {
-            TaskStatus::Stopped
+            TaskStatus::None
         }
     }
 

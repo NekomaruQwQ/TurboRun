@@ -92,7 +92,6 @@ pub fn load_plugin_from_file(base: &Path, path: &Path)
     })
 }
 
-#[expect(clippy::iter_over_hash_type, reason = "replacement order does not matter")]
 pub fn apply_plugins(
     plugin_map: &HashMap<String, Plugin>,
     plugin_vec: &[PluginInstance],
