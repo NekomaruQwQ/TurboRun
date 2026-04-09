@@ -4,6 +4,7 @@ pub use style::setup_style;
 mod color;
 mod style;
 mod widget;
+mod common;
 
 mod app;
 mod nav;
@@ -21,6 +22,8 @@ mod page {
     pub use task_viewer::task_viewer_ui;
     pub use task_editor::task_editor_ui;
 }
+
+const TASK_VIEWER_PLUGIN_CARD_COMPACT: bool = true;
 
 use crate::data::*;
 use crate::engine::TaskEngine;

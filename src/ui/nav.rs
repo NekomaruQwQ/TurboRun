@@ -2,9 +2,8 @@ use tap::prelude::*;
 use egui::*;
 use egui_flex::*;
 
-use super::color;
 use super::*;
-use super::widget::ActionButton;
+use super::widget::*;
 
 pub fn nav_ui(
     flex: &mut FlexInstance,
@@ -14,7 +13,7 @@ pub fn nav_ui(
     flex.add(
         item(),
         Button::new("")
-            .left_text(format!("{}  Dashboard", nf::md::MD_MONITOR_DASHBOARD))
+            .left_text(format!("{}  Dashboard", nf::md::MD_VIEW_DASHBOARD))
             .selected(matches!(page, Page::Dashboard)))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
@@ -38,29 +37,13 @@ pub fn nav_ui(
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
                 .then(|| view.set_navigation(Page::Plugins));
-            flex.add(
-                item(),
-                ActionButton::new()
-                    .icon(nf::fa::FA_ARROWS_ROTATE)
-                    .tooltip("View Plugins"))
+            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_ARROWS_ROTATE))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
                 .then(|| view.set_action(Action::RefreshPlugins));
         });
 
-    // This is a more "polite" implementation of a separator that
-    // does not try to consume all available width (which would
-    // cause unwanted stretching of the side panel and its contents).
-    flex.add_ui(item(), |ui| {
-        let (rect, _) =
-            ui.allocate_exact_size(
-                Vec2::new(ui.available_width(), 1.0),
-                Sense::hover());
-        ui.painter().hline(
-            rect.x_range(),
-            rect.center().y,
-            Stroke::new(1.0, color::BORDER));
-    });
+    flex.add(item(), FlexSeparator);
 
     let is_editing_new_task =
         matches!(page, Page::TaskEditor(t) if engine.task(t.id).is_none());
@@ -104,6 +87,7 @@ fn nav_task_ui(
     flex.add_flex(
         item(),
         Flex::horizontal()
+            .id_salt(format!("nav_task_{}", task.id))
             .w_full()
             .gap([4.0, 4.0].into()),
         |flex| {
@@ -117,9 +101,8 @@ fn nav_task_ui(
                 .then(|| view.set_navigation(Page::TaskViewer(task.id)));
             flex.add(
                 item(),
-                ActionButton::new()
+                FlexActionButton::new()
                     .icon(nf::fa::FA_PEN)
-                    .tooltip("Edit Task")
                     .selected(task_editor_selected))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()

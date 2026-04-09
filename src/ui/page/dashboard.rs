@@ -6,92 +6,72 @@ use crate::engine::TaskEngine;
 use crate::worker::TaskStatus;
 
 use super::*;
-use super::widget::ActionButton;
+use super::widget::FlexActionButton;
+use super::common::task_status_label;
 
 pub fn dashboard_ui(
     flex: &mut FlexInstance,
-    page: &mut ViewContext,
+    view: &mut ViewContext,
     engine: &TaskEngine) {
     for worker in engine.tasks_sorted() {
-        let task_id = worker.task().id;
-        flex.add_ui(item().grow(1.0), |ui| {
+        flex.add_ui(item(), |ui| {
             task_card(
                 ui,
-                page,
+                view,
                 worker.task(),
-                engine.task_status(task_id),
-                engine.task_is_valid(task_id),
-                worker.is_running());
+                engine.task_status(worker.task().id));
         });
     }
 }
 
 fn task_card(
     ui: &mut Ui,
-    page: &mut ViewContext,
+    view: &mut ViewContext,
     task: &Task,
-    status: TaskStatus,
-    is_valid: bool,
-    is_running: bool) {
-    let _ = widget::card(ui, |ui| {
-        Flex::horizontal()
-            .w_full()
-            .gap([4.0, 0.0].into())
-            .align_items(FlexAlign::Center)
-            .show(ui, |flex| {
-                task_card_content(
-                    flex,
-                    page,
-                    task,
-                    status,
-                    is_valid,
-                    is_running);
-            })
-    });
+    status: TaskStatus) {
+    Frame::new()
+        .fill(color::CARD)
+        .corner_radius(6.0)
+        .inner_margin(Margin::same(4))
+        .show(ui, |ui| {
+            Flex::horizontal()
+                .id_salt(format!("dashboard_task_{}", task.id))
+                .w_full()
+                .gap([4.0, 0.0].into())
+                .show(ui, |flex| {
+                    task_card_content(
+                        flex,
+                        view,
+                        task,
+                        status);
+                })
+        });
 }
 
 fn task_card_content(
     flex: &mut FlexInstance,
-    page: &mut ViewContext,
+    view: &mut ViewContext,
     task: &Task,
-    status: TaskStatus,
-    is_valid: bool,
-    is_running: bool) {
-    let status_ui =
-        match status {
-            TaskStatus::Invalid =>
-                RichText::new("Invalid").color(color::ORANGE),
-            TaskStatus::Stopped =>
-                RichText::new("").weak(),
-            TaskStatus::Running =>
-                RichText::new("Running").color(color::BLUE),
-            TaskStatus::Success =>
-                RichText::new("Success").color(color::GREEN),
-            TaskStatus::Failure =>
-                RichText::new("Failed").color(color::RED),
-        }.small();
-
+    status: TaskStatus) {
     // Run — disabled while already running or invalid.
     flex.add(
             item(),
-            ActionButton::new()
+            FlexActionButton::new()
                 .icon(nf::fa::FA_PLAY)
-                .tooltip("Run Task")
-                .enabled(!is_running && is_valid))
+                .enabled(status.can_start()))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| page.set_action(Action::RunTask(task.id)));
+        .then(|| view.set_action(Action::RunTask(task.id)));
 
     // Stop — disabled when not running.
     flex.add(
             item(),
-            ActionButton::new()
+            FlexActionButton::new()
                 .icon(nf::fa::FA_STOP)
-                .tooltip("Stop Task")
-                .enabled(is_running))
+                .enabled(status.can_stop()))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| page.set_action(Action::StopTask(task.id)));
+        .then(|| view.set_action(Action::StopTask(task.id)));
 
     // Task name + status. Clicking anywhere on this opens the task viewer.
     flex
@@ -99,20 +79,25 @@ fn task_card_content(
             item().grow(1.0),
             Button::new("")
                 .left_text(&task.name)
-                .right_text(status_ui)
+                .right_text(task_status_label(status).small())
                 .truncate())
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| page.set_navigation(Page::TaskViewer(task.id)));
+        .then(|| view.set_navigation(Page::TaskViewer(task.id)));
 
     // Edit — disabled when running.
     flex
         .add(item(),
-            ActionButton::new()
+            FlexActionButton::new()
                 .icon(nf::fa::FA_PEN)
-                .tooltip("Edit")
-                .enabled(!is_running))
+                .enabled(status.can_edit()))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| page.set_navigation(Page::TaskEditor(task.clone())));
+        .then(|| view.set_navigation(Page::TaskEditor(task.clone())));
+
+    // let delete_confirm_id = Id::new(("dashboard.delete_confirm", task.id));
+    // let delete_confirm =
+    //     flex.ui()
+    //         .data_mut(|data| data.get_temp::<bool>(delete_confirm_id))
+    //         .unwrap_or(false);
 }

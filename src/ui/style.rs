@@ -90,11 +90,11 @@ pub fn setup_style(ctx: &Context) {
 
         style.text_styles = [
             (TextStyle::Heading,
-                FontId::new(15.0, FontFamily::Proportional)),
+                FontId::new(13.5, FontFamily::Proportional)),
             (TextStyle::Body,
                 FontId::new(12.0, FontFamily::Proportional)),
             (TextStyle::Monospace,
-                FontId::new(10.0, FontFamily::Monospace)),
+                FontId::new(10.5, FontFamily::Monospace)),
             (TextStyle::Button,
                 FontId::new(12.0, FontFamily::Proportional)),
             (TextStyle::Small,

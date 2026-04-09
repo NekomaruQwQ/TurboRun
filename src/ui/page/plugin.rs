@@ -1,6 +1,7 @@
 use egui::*;
 
 use super::*;
+use super::common::code_block;
 
 pub fn plugin_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
     ui
@@ -16,13 +17,8 @@ pub fn plugin_ui(ui: &mut Ui, view: &mut ViewContext, engine: &TaskEngine) {
                 "{}  {}",
                 nf::fa::FA_PUZZLE_PIECE,
                 plugin.name)).monospace();
-            let source =
-                RichText::new(plugin.source.trim_end())
-                .monospace()
-                .weak()
-                .line_height(Some(15.0));
             CollapsingHeader::new(header).show(ui, |ui| {
-                ui.label(source);
+                ui.label(code_block(&plugin.source).weak());
             });
         }
     });

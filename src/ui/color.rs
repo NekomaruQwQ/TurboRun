@@ -6,6 +6,7 @@ use egui::Color32;
 
 const ZINC_950: Color32 = Color32::from_rgb(0x09, 0x09, 0x0B);
 const ZINC_900: Color32 = Color32::from_rgb(0x18, 0x18, 0x1B);
+const ZINC_850: Color32 = Color32::from_rgb(0x1E, 0x1E, 0x22);
 const ZINC_800: Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
 const ZINC_700: Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
 const ZINC_400: Color32 = Color32::from_rgb(0xA1, 0xA1, 0xAA);

@@ -1,146 +1,150 @@
 use egui::*;
+use egui_flex::*;
 
-use super::color;
-use crate::worker::TaskStatus;
+use crate::data::*;
+use crate::worker::*;
 
 use super::*;
+use super::widget::*;
+use super::common::*;
 
-#[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
 pub fn task_viewer_ui(
-    ui: &mut Ui,
+    flex: &mut FlexInstance,
     view: &mut ViewContext,
     engine: &TaskEngine,
     task_id: TaskId) {
     let worker = engine.task(task_id).expect("task_id must be valid");
     let task = worker.task();
-    let status = engine.task_status(task_id);
-    let is_running = worker.is_running();
-    let is_valid = engine.task_is_valid(task_id);
-
-    // — Heading + controls card —
-    card(ui, |ui| {
-        ui.heading(&task.name);
-        ui.horizontal(|ui| {
-            if ui.add_enabled(
-                !is_running && is_valid,
-                Button::new(format!("{}  Start", nf::fa::FA_PLAY))).clicked()
-            {
-                view.set_action(Action::RunTask(task_id));
-            }
-            if ui.add_enabled(
-                is_running,
-                Button::new(format!("{}  Stop", nf::fa::FA_STOP))).clicked()
-            {
-                view.set_action(Action::StopTask(task_id));
-            }
-            // ui.label(format_status(status));
-        });
-    });
-
-    ui.add_space(8.0);
-
-    // — Fields card (readonly) —
-    card(ui, |ui| {
-        Grid::new("task_fields")
-            .num_columns(2)
-            .spacing([12.0, 4.0])
-            .show(ui, |ui| {
-                ui.label("Command");
-                ui.label(&task.command);
-                ui.end_row();
-
-                ui.label("Plugins");
-                if task.plugins.is_empty() {
-                    ui.weak("(none)");
-                } else {
-                    ui.vertical(|ui| {
-                        for inst in &task.plugins {
-                            if inst.vars.is_empty() {
-                                ui.label(&inst.name);
-                            } else {
-                                let vars = inst.vars
-                                    .iter()
-                                    .map(|&(ref k, ref v)| format!("{k}={v}"))
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                ui.label(format!("{} ({})", inst.name, vars));
-                            }
-                        }
-                    });
-                }
-                ui.end_row();
-            });
-    });
-
-    ui.add_space(8.0);
-
-    // — stdout card —
     let stdout = worker.stdout();
-    card(ui, |ui| {
-        CollapsingHeader::new(format!("stdout ({} lines)", stdout.len()))
-            .default_open(true)
-            .show(ui, |ui| {
-                if stdout.is_empty() {
-                    ui.weak("(no output)");
-                } else {
-                    ScrollArea::vertical()
-                        .id_salt("stdout_scroll")
-                        .max_height(160.0)
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            for line in stdout {
-                                ui.monospace(line);
-                            }
-                        });
-                }
-            });
-    });
-
-    ui.add_space(8.0);
-
-    // — stderr card —
     let stderr = worker.stderr();
-    // Auto-expand stderr when it has content, since non-empty stderr usually
-    // signals an error worth surfacing immediately.
-    card(ui, |ui| {
-        CollapsingHeader::new(format!("stderr ({} lines)", stderr.len()))
-            .default_open(!stderr.is_empty())
-            .show(ui, |ui| {
-                if stderr.is_empty() {
-                    ui.weak("(no output)");
-                } else {
-                    ScrollArea::vertical()
-                        .id_salt("stderr_scroll")
-                        .max_height(160.0)
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            for line in stderr {
-                                ui.monospace(line);
-                            }
+    let status = engine.task_status(task_id);
+
+    assert!(flex.is_vertical(), "task_viewer_ui requires a vertical flex");
+
+    // — Main card —
+    FlexCard::default()
+        .stretch()
+        .show(flex, |flex| task_main_card(flex, view, task, status));
+
+    // — Command card (readonly) —
+    FlexCard::default()
+        .padding(Margin::symmetric(10, 8))
+        .show(flex, |flex| {
+            flex.add(item(), Label::new("Command"));
+            flex.add(item(), Label::new(code_block(&task.command)));
+        });
+
+    // — Plugins card (readonly) —
+    FlexCard::default()
+        .padding(Margin::symmetric(10, 8))
+        .show(flex, |flex| task_plugin_card(flex, &task.plugins));
+
+    // — Output cards —
+    FlexCard::default()
+        .item(item().grow(1.0))
+        .padding(Margin::symmetric(10, 8))
+        .show(flex, |flex| task_output_card(flex, "Standard Output", stdout));
+    FlexCard::default()
+        .item(item().grow(2.0))
+        .padding(Margin::symmetric(10, 8))
+        .show(flex, |flex| task_output_card(flex, "Standard Error", stderr));
+}
+
+fn task_main_card(
+    flex: &mut FlexInstance,
+    view: &mut ViewContext,
+    task: &Task,
+    status: TaskStatus) {
+    flex.add_flex(
+        item(),
+        Flex::horizontal()
+            .w_full()
+            .gap((4.0, 4.0).into()),
+        |flex| {
+            flex.add_ui(
+                item()
+                    .grow(1.0)
+                    .align_self_content(Align2::LEFT_CENTER),
+                |ui| ui.horizontal(|ui| {
+                    ui.add_space(6.0);
+                    ui.add(Label::new(RichText::new(&task.name).heading()).wrap());
+                }));
+            flex.add(item(), Label::new(task_status_label(status).small()));
+            flex.add(item(), Label::new(""));
+            flex.add_ui(item(), |ui| {
+                    ui.add_enabled(
+                        status.can_start(),
+                        Button::new(format!("{}  Start", nf::fa::FA_PLAY)))
+                })
+                .inner
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+                .then(|| view.set_action(Action::RunTask(task.id)));
+            flex.add_ui(item(), |ui| {
+                    ui.add_enabled(
+                        status.can_stop(),
+                        Button::new(format!("{}  Stop", nf::fa::FA_STOP)))
+                })
+                .inner
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+                .then(|| view.set_action(Action::StopTask(task.id)));
+            flex.add_ui(item(), |ui| {
+                    ui.add_enabled(
+                        status.can_edit(),
+                        Button::new(format!("{}  Edit", nf::fa::FA_PEN)))
+                })
+                .inner
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+                .then(|| view.set_navigation(Page::TaskEditor(task.clone())));
+        });
+}
+
+fn task_plugin_card(
+    flex: &mut FlexInstance,
+    plugins: &[PluginInstance]) {
+    flex.add_ui(item(), |ui| ui.horizontal(|ui| {
+        ui.label("Plugins");
+        ui.label(RichText::new(format!("{} used", plugins.len())).weak().small());
+    }));
+
+    for inst in plugins {
+        flex.add_ui(item(), |ui| {
+            let label = format!("{} {}", nf::fa::FA_PUZZLE_PIECE, &inst.name);
+            if super::TASK_VIEWER_PLUGIN_CARD_COMPACT {
+                let vars =
+                    inst.vars
+                        .iter()
+                        .map(|&(ref key, ref value)| format!("{key}: \"{value}\""))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(label).monospace());
+                    ui.label(RichText::new(format!("{{ {vars} }}")).monospace().weak());
+                });
+            } else {
+                CollapsingHeader::new(RichText::new(label).monospace()).show(ui, |ui| {
+                    for &(ref key, ref value) in &inst.vars {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(key).monospace().weak());
+                            ui.label(RichText::new(value).monospace());
                         });
-                }
-            });
-    });
+                    }
+                });
+            }
+        });
+    }
 }
 
-/// Wraps a UI section in a PWA-style "card": rounded, padded, painted with
-/// the theme's faint surface color. Local helper because `task.rs` is the only
-/// consumer; promote to `theme::card` if a second site appears.
-fn card<R>(ui: &mut Ui, body: impl FnOnce(&mut Ui) -> R) -> R {
-    Frame::new()
-        .fill(ui.visuals().faint_bg_color)
-        .corner_radius(6.0)
-        .inner_margin(Margin::same(10))
-        .show(ui, body)
-        .inner
-}
-
-fn format_status(status: TaskStatus) -> RichText {
-    match status {
-        TaskStatus::Invalid => RichText::new("Invalid").color(color::ORANGE),
-        TaskStatus::Stopped => RichText::new("").weak(),
-        TaskStatus::Running => RichText::new("Running").color(color::BLUE),
-        TaskStatus::Success => RichText::new("Success").color(color::GREEN),
-        TaskStatus::Failure => RichText::new("Failed").color(color::RED),
-    }.small()
+fn task_output_card(
+    flex: &mut FlexInstance,
+    title: &str,
+    lines: &[String]) {
+    flex.add(item(), Label::new(title));
+    if !lines.is_empty() {
+        flex.add(item(), Label::new(code_block(&lines.join("\n")).weak()));
+    } else {
+        flex.add(item(), Label::new(code_block("(no output)").weak()));
+    }
 }
