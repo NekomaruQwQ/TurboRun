@@ -111,28 +111,28 @@ fn task_plugin_card(
 
     for inst in plugins {
         flex.add_ui(item(), |ui| {
-            let label = format!("{} {}", nf::fa::FA_PUZZLE_PIECE, &inst.name);
-            if super::TASK_VIEWER_PLUGIN_CARD_COMPACT {
-                let vars =
-                    inst.vars
-                        .iter()
-                        .map(|&(ref key, ref value)| format!("{key}: \"{value}\""))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(label).monospace());
-                    ui.label(RichText::new(format!("{{ {vars} }}")).monospace().weak());
-                });
-            } else {
-                CollapsingHeader::new(RichText::new(label).monospace()).show(ui, |ui| {
-                    for &(ref key, ref value) in &inst.vars {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(key).monospace().weak());
-                            ui.label(RichText::new(value).monospace());
-                        });
-                    }
-                });
-            }
+            // let label = format!("{} {}", nf::fa::FA_PUZZLE_PIECE, &inst.item_name);
+            // if super::TASK_VIEWER_PLUGIN_CARD_COMPACT {
+            //     let vars =
+            //         inst.vars
+            //             .iter()
+            //             .map(|&(ref key, ref value)| format!("{key}: \"{value}\""))
+            //             .collect::<Vec<_>>()
+            //             .join(", ");
+            //     ui.horizontal(|ui| {
+            //         ui.label(RichText::new(label).monospace());
+            //         ui.label(RichText::new(format!("{{ {vars} }}")).monospace().weak());
+            //     });
+            // } else {
+            //     CollapsingHeader::new(RichText::new(label).monospace()).show(ui, |ui| {
+            //         for &(ref key, ref value) in &inst.vars {
+            //             ui.horizontal(|ui| {
+            //                 ui.label(RichText::new(key).monospace().weak());
+            //                 ui.label(RichText::new(value).monospace());
+            //             });
+            //         }
+            //     });
+            // }
         });
     }
 }

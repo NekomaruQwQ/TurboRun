@@ -4,10 +4,13 @@
 mod task_id;
 pub use task_id::TaskId;
 
-use std::path::PathBuf;
-use std::time::SystemTime;
+mod ext;
+
+use std::collections::BTreeMap;
 
 use serde::*;
+
+use crate::util::is_default;
 
 /// Represents a TurboRun configuration, loaded from and saved to a TOML file.
 ///
@@ -46,57 +49,63 @@ pub struct Task {
     /// Plugins are applied in the order they are listed, i.e. the first plugin
     /// is the innermost wrapper around the command, and the last plugin is the
     /// outermost.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub plugins: Vec<PluginInstance>,
-
-    /// The last time this task was modified by the user, in milliseconds since
-    /// the Unix epoch.
-    pub last_modified: SystemTime,
-}
-
-impl Task {
-    pub fn empty() -> Self {
-        Self {
-            id: TaskId::random(),
-            name: String::new(),
-            command: String::new(),
-            plugins: Vec::new(),
-            last_modified: SystemTime::now(),
-        }
-    }
-
-    pub fn example() -> Self {
-        Self {
-            name: "Example Task".into(),
-            command: "print \"Hello, TurboRun!\"".into(),
-            plugins: vec![
-                PluginInstance::new("timed")
-                    .var("unit", "ms")
-            ],
-            ..Self::empty()
-        }
-    }
 }
 
 /// Represents a plugin that can be applied to a task's command to modify its
 /// behavior.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize)]
 pub struct Plugin {
-    /// The name of this plugin, uniquely identifying it among all plugins.
-    ///
-    /// For external plugins loaded from disk, this is derived from the relative
-    /// path of the plugin's source file from the plugins directory without
-    /// extension.
+    /// Name of the plugin file under the plugin directory, including the .nu
+    /// extension. This field is not serialized.
+    #[serde(skip)]
+    pub file_name: String,
+
+    /// Name of the custom command in the plugin file to be used as a plugin.
+    #[serde(rename = "name")]
+    pub item_name: String,
+
+    /// A short description of this plugin's behavior and purpose.
+    pub description: Option<String>,
+
+    /// A list of args that this plugin accepts.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default")]
+    pub args: Vec<PluginArg>,
+
+    /// A list of flags that this plugin accepts.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default")]
+    pub flags: Vec<PluginFlag>,
+}
+
+/// Represents a lookup table of plugins, indexed first by plugin file name and
+/// then by item name for easy retrieval.
+pub type PluginMap = BTreeMap<String, BTreeMap<String, Plugin>>;
+
+/// Represents a flag that a Nushell custom command accepts.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize)]
+pub struct PluginFlag {
     pub name: String,
-    /// The full path to the plugin file, or [`None`] for built-in plugins.
-    pub path: Option<PathBuf>,
-    /// The source code of this plugin.
-    pub source: String,
-    /// The last modified time of this plugin in milliseconds since the Unix
-    /// epoch.
-    ///
-    /// For built-in plugins, this field is always zero.
-    pub last_modified: SystemTime,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize)]
+pub struct PluginArg {
+    pub name: String,
+    pub description: Option<String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default")]
+    pub required: bool,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default")]
+    pub accepted_values: Vec<String>,
 }
 
 /// Represents a specific instance of a plugin applied to a task, including
@@ -104,17 +113,25 @@ pub struct Plugin {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct PluginInstance {
-    pub name: String,
-    pub vars: Vec<(String, String)>,
+    pub file_name: String,
+    pub item_name: String,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default")]
+    pub args: BTreeMap<String, String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default")]
+    pub flags: Vec<String>,
 }
 
 impl PluginInstance {
-    pub fn new(name: &str) -> Self {
-        Self { name: name.into(), vars: Vec::new() }
-    }
-
-    pub fn var(mut self, name: &str, value: &str) -> Self {
-        self.vars.push((name.into(), value.into()));
-        self
+    pub fn new(path: &str, name: &str) -> Self {
+        Self {
+            file_name: path.into(),
+            item_name: name.into(),
+            args: BTreeMap::new(),
+            flags: Vec::new(),
+        }
     }
 }

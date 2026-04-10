@@ -20,7 +20,7 @@ use super::*;
 pub fn task_editor_ui(
     ui: &mut Ui,
     view: &mut ViewContext,
-    plugins: &[&Plugin],
+    plugins: &PluginMap,
     task: &mut Task,
     is_existing: bool) {
     ui.separator();
@@ -42,7 +42,6 @@ pub fn task_editor_ui(
 
     ui.horizontal(|ui| {
         if ui.add_enabled(valid, Button::new(format!("{}  Save", nf::fa::FA_FLOPPY_DISK))).clicked() {
-            task.last_modified = SystemTime::now();
             view.set_action(Action::SaveTask(task.clone()));
             view.set_navigation(Page::TaskViewer(task_id));
         }
@@ -109,17 +108,13 @@ pub fn task_editor_ui(
     ui.separator();
 
     // — Plugins section —
-    // Snapshot the available plugin names once so the inner combo boxes don't
-    // need to re-borrow `engine` per row.
-    let first_plugin_name = plugins.first().map(|p| p.name.clone()).unwrap_or_default();
-
     ui.horizontal(|ui| {
         ui.label("Plugins");
         if ui.small_button(format!("{}  Add plugin", nf::fa::FA_PLUS)).clicked() {
             // Default to the first available plugin name; if none are loaded
             // we still let the user add a row, which will surface as missing
             // and prompt them to fix the plugin directory / config.
-            task.plugins.push(PluginInstance::new(&first_plugin_name));
+            task.plugins.push(PluginInstance::new("base.nu".into(), "noop".into()));
         }
     });
 
@@ -127,66 +122,71 @@ pub fn task_editor_ui(
     let mut to_remove_plugin: Option<usize> = None;
     let mut to_move_up:       Option<usize> = None;
     let mut to_move_down:     Option<usize> = None;
-    let mut to_add_var:       Option<usize> = None;
-    let mut to_remove_var:    Option<(usize, usize)> = None;
 
     for (idx, inst) in task.plugins.iter_mut().enumerate() {
         // push_id keeps each plugin row's child widget IDs stable as plugins
         // are added/removed at other indices.
-        ui.push_id(idx, |ui| {
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    let missing = !plugins.iter().any(|p| p.name == inst.name);
-                    let label = if missing {
-                        RichText::new(format!("{} (missing)", inst.name))
-                            .color(color::ORANGE)
-                    } else {
-                        RichText::new(&inst.name)
-                    };
-                    ComboBox::from_id_salt("plugin_combo")
-                        .selected_text(label)
-                        .show_ui(ui, |ui| {
-                            for plugin in plugins {
-                                ui.selectable_value(&mut inst.name, plugin.name.clone(), &plugin.name);
-                            }
-                        });
+        // ui.push_id(idx, |ui| {
+        //     ui.group(|ui| {
+        //         ui.horizontal(|ui| {
+        //             let missing =
+        //                 !plugins
+        //                     .iter()
+        //                     .any(|&plugin| {
+        //                         plugin.file_name == inst.file_name &&
+        //                         plugin.item_name == inst.item_name
+        //                     });
+        //             let label = if missing {
+        //                 RichText::new(format!("{} (missing)", inst.item_name))
+        //                     .color(color::ORANGE)
+        //             } else {
+        //                 RichText::new(&inst.item_name)
+        //             };
 
-                    if ui.small_button(nf::fa::FA_ARROW_UP).on_hover_text("Move up").clicked() {
-                        to_move_up = Some(idx);
-                    }
-                    if ui.small_button(nf::fa::FA_ARROW_DOWN).on_hover_text("Move down").clicked() {
-                        to_move_down = Some(idx);
-                    }
-                    if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove plugin").clicked() {
-                        to_remove_plugin = Some(idx);
-                    }
-                });
+        //             ComboBox::from_id_salt("plugin_combo")
+        //                 .selected_text(label)
+        //                 .show_ui(ui, |ui| {
+        //                     for plugin in plugins {
+        //                         ui.selectable_value(&mut inst.item_name, plugin.name.clone(), &plugin.name);
+        //                     }
+        //                 });
 
-                ui.weak("keys must match {{name}} placeholders in the plugin source");
+        //             if ui.small_button(nf::fa::FA_ARROW_UP).on_hover_text("Move up").clicked() {
+        //                 to_move_up = Some(idx);
+        //             }
+        //             if ui.small_button(nf::fa::FA_ARROW_DOWN).on_hover_text("Move down").clicked() {
+        //                 to_move_down = Some(idx);
+        //             }
+        //             if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove plugin").clicked() {
+        //                 to_remove_plugin = Some(idx);
+        //             }
+        //         });
 
-                for (row_idx, &mut (ref mut key, ref mut value)) in inst.vars.iter_mut().enumerate() {
-                    ui.push_id(row_idx, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.add(
-                                TextEdit::singleline(key)
-                                    .hint_text("name")
-                                    .desired_width(120.0));
-                            ui.add(
-                                TextEdit::singleline(value)
-                                    .hint_text("value")
-                                    .desired_width(180.0));
-                            if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove var").clicked() {
-                                to_remove_var = Some((idx, row_idx));
-                            }
-                        });
-                    });
-                }
+        //         ui.weak("keys must match {{name}} placeholders in the plugin source");
 
-                if ui.small_button(format!("{}  Add var", nf::fa::FA_PLUS)).clicked() {
-                    to_add_var = Some(idx);
-                }
-            });
-        });
+        //         for (row_idx, &mut (ref mut key, ref mut value)) in inst.vars.iter_mut().enumerate() {
+        //             ui.push_id(row_idx, |ui| {
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(
+        //                         TextEdit::singleline(key)
+        //                             .hint_text("name")
+        //                             .desired_width(120.0));
+        //                     ui.add(
+        //                         TextEdit::singleline(value)
+        //                             .hint_text("value")
+        //                             .desired_width(180.0));
+        //                     if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove var").clicked() {
+        //                         to_remove_var = Some((idx, row_idx));
+        //                     }
+        //                 });
+        //             });
+        //         }
+
+        //         if ui.small_button(format!("{}  Add var", nf::fa::FA_PLUS)).clicked() {
+        //             to_add_var = Some(idx);
+        //         }
+        //     });
+        // });
     }
 
     // Apply deferred plugin/var mutations. Order matters only insofar as we
@@ -204,11 +204,5 @@ pub fn task_editor_ui(
         && i + 1 < task.plugins.len()
     {
         task.plugins.swap(i, i + 1);
-    }
-    if let Some(i) = to_add_var {
-        task.plugins[i].vars.push((String::new(), String::new()));
-    }
-    if let Some((i, j)) = to_remove_var {
-        task.plugins[i].vars.remove(j);
     }
 }

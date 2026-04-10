@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io;
+use std::path::Path;
 use std::process::*;
 use std::sync::mpsc;
 use std::thread;
@@ -91,7 +91,7 @@ impl TaskWorker {
         self.task = task;
     }
 
-    pub fn status(&self, plugins: &HashMap<String, Plugin>) -> TaskStatus {
+    pub fn status(&self, plugins: &PluginMap) -> TaskStatus {
         if !self.is_valid(plugins) {
             TaskStatus::Invalid
         } else if self.is_running() {
@@ -107,24 +107,34 @@ impl TaskWorker {
         }
     }
 
-    pub fn is_valid(&self, plugins: &HashMap<String, Plugin>) -> bool {
+    fn is_valid(&self, plugins: &PluginMap) -> bool {
+        !self.task.name.trim().is_empty() &&
         !self.task.command.trim().is_empty() && {
             self.task
                 .plugins
                 .iter()
-                .all(|inst| {
-                    let Some(plugin) = plugins.get(&inst.name) else {
-                        return false;
-                    };
+                .map(|inst| -> anyhow::Result<()> {
+                    let plugin =
+                        plugins
+                            .get(&inst.file_name)
+                            .context("plugin file not found")?
+                            .get(&inst.item_name)
+                            .context("plugin item not found")?;
+                    for arg in &plugin.args {
+                        if arg.required && !inst.args.contains_key(&arg.name) {
+                            anyhow::bail!("missing required argument \"{}\" for plugin \"{}\"", arg.name, plugin.item_name);
+                        }
 
-                    inst.vars
-                        .iter()
-                        .all(|&(ref key, ref value)| {
-                            !key.trim().is_empty() &&
-                            !value.trim().is_empty() &&
-                                plugin.source.contains(&["{{", key, "}}"].concat())
-                        })
+                        if let Some(arg_value) = inst.args.get(&arg.name) {
+                            if !arg.accepted_values.is_empty() && !arg.accepted_values.contains(arg_value) {
+                                anyhow::bail!("invalid value \"{}\" for argument \"{}\" of plugin \"{}\"", arg_value, arg.name, plugin.item_name);
+                            }
+                        }
+                    }
+
+                    Ok(())
                 })
+                .all(|result| result.is_ok())
         }
     }
 
@@ -173,16 +183,17 @@ impl TaskWorker {
     }
 
     #[expect(clippy::panic_in_result_fn, reason = "precondition check")]
-    pub fn run(&mut self, plugins: &HashMap<String, Plugin>) -> anyhow::Result<()> {
+    pub fn run(&mut self, plugin_dir: &Path, plugins: &PluginMap)
+     -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");
 
         let script =
             apply_plugins(
-                plugins,
-                &self.task.plugins,
-                &self.task.command)?;
-        log::info!("running task {} with script: >>>\n{script}\n<<<", self.task.name);
+                plugin_dir,
+                &self.task.command,
+                &self.task.plugins)?;
+        log::info!("running task \"{}\" with script: >>>\n{script}\n<<<", self.task.name);
         let child =
             Command::new("nu")
                 .arg("-l")

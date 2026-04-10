@@ -24,7 +24,12 @@ pub fn nav_ui(
             .w_full()
             .gap([4.0, 4.0].into()),
         |flex| {
-            let plugin_count = engine.plugins_sorted().len();
+            let plugin_count =
+                engine
+                    .plugins()
+                    .values()
+                    .flatten()
+                    .count();
             flex.add(
                 item().grow(1.0),
                 Button::new("")

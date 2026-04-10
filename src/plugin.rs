@@ -1,115 +1,137 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use anyhow::Context as _;
-use tap::Pipe as _;
+use tap::prelude::*;
 
-use crate::util::*;
+use anyhow::Context as _;
+use itertools::Itertools as _;
+use serde::Deserialize as _;
+
 use crate::data::*;
 
-pub fn scan_plugins(dir: &Path) -> anyhow::Result<Vec<Plugin>> {
-    fs::read_dir(dir)
-        .pipe(none_if_not_found)
-        .context("fs::read_dir failed")?
+pub fn scan_plugins(plugin_dir: &Path) -> anyhow::Result<PluginMap> {
+    log::info!("scanning plugins at \"{}\" ...", plugin_dir.display());
+    fs::read_dir(plugin_dir)
+        .with_context(|| format!("fs::read_dir failed: {}", plugin_dir.display()))?
         .into_iter()
         .flatten()
-        .filter_map(Result::ok)
-        .flat_map(|entry| {
-            scan_plugins_from_dir_entry(dir, &entry)
-                .unwrap_or_else(|err| {
-                    log::warn!(
-                        "failed to scan plugins at {}: {err:?}",
-                        entry.path().display());
-                    Vec::new()
-                })
+        .map(|entry| entry.path())
+        .filter_map(|path| {
+            check_plugin_file(&path)
+                .tap_err(|err| log::warn!("skipping \"{}\": {err:?}", path.display()))
+                .ok()
         })
-        .collect::<Vec<_>>()
+        .filter_map(|file_name| {
+            load_plugins_from_file(plugin_dir, &file_name)
+                .tap_err(|err| log::error!("failed to load plugin file \"{file_name}\": {err:?}"))
+                .ok()?
+                .map(|plugin| (plugin.item_name.clone(), plugin))
+                .collect::<BTreeMap<_, _>>()
+                .pipe(|plugins| (file_name.clone(), plugins))
+                .pipe(Some)
+        })
+        .collect::<BTreeMap<_, _>>()
         .pipe(Ok)
 }
 
-/// Loads a plugin at the given path.
-fn scan_plugins_from_dir_entry(
-    plugin_dir: &Path,
-    entry: &fs::DirEntry)
- -> anyhow::Result<Vec<Plugin>> {
-    let path = entry.path();
-    let path_display = path.display();
-    let file_type =
-        entry
-            .file_type()
-            .context("fs::file_type failed")?;
-
-    if !file_type.is_dir() {
-        let file_name =
-            path.file_name()
-                .unwrap_or_default()
-                .to_string_lossy();
-        if file_name.ends_with(".nu") {
-            load_plugin_from_file(plugin_dir, &path)?
-                .pipe(|plugin| vec![plugin])
-                .pipe(Ok)
-        } else {
-            log::warn!("skipping non-plugin file at {path_display}");
-            Ok(Vec::new())
-        }
+/// Checks if the given path is a valid plugin file (i.e. a .nu file) and
+/// returns its file name if valid.
+fn check_plugin_file(path: &Path) -> anyhow::Result<String> {
+    let file_name =
+        path.file_name()
+            .expect("@logicError unexpected path");
+    let file_name =
+        file_name
+            .to_str()
+            .context("file name is not valid utf-8")?
+            .to_owned();
+    if path.is_file() && path.extension().is_some_and(|ext| ext == "nu") {
+        file_name.pipe(Ok)
     } else {
-        scan_plugins(&path)
+        anyhow::bail!("not a .nu file");
     }
 }
 
-/// Loads a plugin at the given path.
-#[expect(
-    clippy::missing_assert_message,
-    clippy::panic_in_result_fn,
-    reason = "precondition check")]
-pub fn load_plugin_from_file(base: &Path, path: &Path)
- -> anyhow::Result<Plugin> {
-    assert!(path.starts_with(base));
-    assert!(path.is_file());
-    assert!(path.extension().unwrap_or_default() == "nu");
+pub fn load_plugins_from_file(base: &Path, file_name: &str)
+ -> anyhow::Result<impl Iterator<Item = Plugin>> {
+    use toml::Value as TomlValue;
+    use toml::Table as TomlTable;
 
-    let name =
-        path
-            .strip_prefix(base)
-            .context("Path::strip_prefix failed")?
-            .with_extension("")
-            .to_string_lossy()
-            .replace('\\', "/");
-    let source =
-        fs::read_to_string(path)
-            .context("fs::read_to_string failed")?;
-    let last_modified =
-        fs::metadata(path)
-            .and_then(|metadata| metadata.modified())
-            .context("fs::metadata failed")?;
-    log::info!("loaded plugin {name}");
-    Ok(Plugin {
-        name,
-        source,
-        path: Some(path.to_owned()),
-        last_modified,
-    })
+    fs::read_to_string(base.join(file_name))
+        .context("fs::read_to_string failed")?
+        .pipe(|content| {
+            content
+                .lines()
+                .map(str::trim)
+                .filter_map(|line| line.strip_prefix("#?"))
+                .join("\n")
+        })
+        .pipe(|content| toml::from_str::<TomlTable>(&content))
+        .context("toml::from_str failed")?
+        .pipe(|toml| {
+            toml.get("plugins")
+                .and_then(TomlValue::as_array)
+                .cloned()
+        })
+        .ok_or(anyhow::anyhow!("invalid plugin metadata"))?
+        .into_iter()
+        .map(|value| parse_plugin(file_name, value))
+        .filter_map(move |result| {
+            result
+                .tap_err(|err| log::error!("failed to parse plugin in \"{file_name}\": {err:?}"))
+                .ok()
+        })
+        .pipe(Ok)
+}
+
+fn parse_plugin(file_name: &str, toml: toml::Value) -> anyhow::Result<Plugin> {
+    toml.pipe(|toml| Plugin::deserialize(toml))
+        .context("Plugin::deserialize failed")?
+        .tap_mut(|plugin| plugin.file_name = file_name.into())
+        .pipe(Ok)
 }
 
 pub fn apply_plugins(
-    plugin_map: &HashMap<String, Plugin>,
-    plugin_vec: &[PluginInstance],
-    source: &str)
+    plugin_dir: &Path,
+    source: &str,
+    plugins: &[PluginInstance])
  -> anyhow::Result<String> {
-    let mut out = source.to_owned();
-    for inst in plugin_vec {
-        let mut plugin =
-            plugin_map
-                .get(&inst.name)
-                .with_context(|| format!("plugin not found: {}", inst.name))?
-                .source
-                .clone();
-        for &(ref key, ref value) in &inst.vars {
-            plugin = plugin.replace(&["{{", key, "}}"].concat(), value);
-        }
-
-        out = plugin.replace("{{command}}", &out);
+    let mut out = Vec::new();
+    for &PluginInstance { ref file_name, .. } in plugins.iter() {
+        file_name
+            .pipe(|file_name| plugin_dir.join(file_name))
+            .pipe(|path| path.to_str().expect("@logicError invalid plugin_dir").to_owned())
+            .pipe(|path| path.replace("\\", "/"))
+            .pipe(|path| format!("use \"{path}\""))
+            .pipe(|line| out.push(line));
     }
-    Ok(out)
+
+    let mut i = 0;
+    out.push(["let __closure_0 = { ", source, " }"].join(""));
+    i += 1;
+
+    for inst in plugins {
+        let mut line = format!(
+            "{} {} $__closure_{}",
+            inst.file_name
+                .strip_suffix(".nu")
+                .expect("@logicError invalid file_name"),
+            inst.item_name,
+            i - 1);
+        for (key, value) in &inst.args {
+            line.push_str(&format!(" --{} \"{}\"", key, value));
+        }
+        for flag in &inst.flags {
+            line.push_str(&format!(" --{flag}"));
+        }
+        out.push(format!("let __closure_{i} = {{ {line} }}"));
+        i += 1;
+    }
+
+    out.push(format!("do $__closure_{}", i - 1));
+    out
+        .join("\n")
+        .tap(|result| log::info!(">>>\n{result}\n<<<"))
+        .pipe(Ok)
 }

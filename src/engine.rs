@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -13,7 +14,7 @@ use crate::plugin::*;
 use crate::worker::*;
 
 pub struct TaskEngine {
-    plugins: HashMap<String, Plugin>,
+    plugins: PluginMap,
     tasks: HashMap<TaskId, TaskWorker>,
 
     config_path: PathBuf,
@@ -23,7 +24,7 @@ pub struct TaskEngine {
 impl TaskEngine {
     pub fn new(config_path: &Path, plugin_dir: &Path) -> Self {
         let mut engine = Self {
-            plugins: HashMap::new(),
+            plugins: BTreeMap::new(),
             tasks: HashMap::new(),
             config_path: config_path.to_owned(),
             plugin_dir: plugin_dir.to_owned(),
@@ -60,16 +61,14 @@ impl TaskEngine {
         &self.plugin_dir
     }
 
+    pub const fn plugins(&self) -> &PluginMap {
+        &self.plugins
+    }
+
     pub fn tasks_sorted(&self) -> impl ExactSizeIterator<Item = &TaskWorker> {
         self.tasks
             .values()
             .sorted_by_key(|worker| &worker.task().name)
-    }
-
-    pub fn plugins_sorted(&self) -> impl ExactSizeIterator<Item = &Plugin> {
-        self.plugins
-            .values()
-            .sorted_by_key(|plugin| &plugin.name)
     }
 
     pub fn task_status(&self, task_id: TaskId) -> TaskStatus {
@@ -77,13 +76,6 @@ impl TaskEngine {
             .get(&task_id)
             .expect("invalid task_id")
             .status(&self.plugins)
-    }
-
-    pub fn task_is_valid(&self, task_id: TaskId) -> bool {
-        self.tasks
-            .get(&task_id)
-            .expect("invalid task_id")
-            .is_valid(&self.plugins)
     }
 
     pub fn empty_task(&self) -> Task {
@@ -161,11 +153,7 @@ impl TaskEngine {
     }
 
     pub fn scan_plugins(&mut self) -> anyhow::Result<()> {
-        self.plugins =
-            scan_plugins(&self.plugin_dir)?
-                .into_iter()
-                .map(|plugin| (plugin.name.clone(), plugin))
-                .collect();
+        self.plugins = scan_plugins(&self.plugin_dir)?;
         Ok(())
     }
 
@@ -190,7 +178,7 @@ impl TaskEngine {
         self.tasks
             .get_mut(&task_id)
             .expect("task_id must be valid")
-            .run(&self.plugins)
+            .run(&self.plugin_dir, &self.plugins)
     }
 
     /// Stops the given task if it is running.
