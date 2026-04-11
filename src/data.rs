@@ -17,34 +17,35 @@ use crate::util::is_default;
 /// Fields in this struct and all nested structs use `skip_serializing_if` so
 /// that empty or default values are omitted from the TOML output, keeping
 /// the config file minimal.
+///
 /// The corresponding `#[serde(default)]` on each field ensures that missing
 /// sections are filled in on load.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Default)]
 #[derive(Deserialize, Serialize)]
 pub struct Config {
+    /// List of tasks defined in this config.
+    #[serde(default, skip_serializing_if = "is_default")]
     pub tasks: Vec<Task>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default)]
 #[derive(Deserialize, Serialize)]
 pub struct Task {
-    /// The stable ID of this task.
+    /// The stable ID of this task, uniquely identifying the task.
     ///
-    /// The ID is generated randomly when a new task is created, and should be
-    /// stable across renames and other changes to the task.
+    /// The ID is generated randomly when a new task is created and stays stable
+    /// across renames and other changes to the task.
     pub id: TaskId,
 
-    /// The name of this task, e.g. "Print Hello".
+    /// The name of this task.
     pub name: String,
 
-    /// The command to execute for this task, e.g. "print hello".
+    /// The command to execute for this task.
     pub command: String,
 
-    /// Plugins to load for this task.
-    ///
-    /// Plugins are referenced by their relative path from the plugins directory
-    /// without extension.
+    /// Plugins to load for this task. See [`PluginInstance`] for details.
     ///
     /// Plugins are applied in the order they are listed, i.e. the first plugin
     /// is the innermost wrapper around the command, and the last plugin is the
@@ -53,59 +54,86 @@ pub struct Task {
     pub plugins: Vec<PluginInstance>,
 }
 
-/// Represents a plugin that can be applied to a task's command to modify its
-/// behavior.
+/// Represents a plugin pack, which is a collection of related plugins defined
+/// in a single .nu file.
+///
+/// This struct is not directly deserialized from the TOML metadata of the plugin
+/// file. Instead, it is constructed from the file name and the list of plugins
+/// parsed from the file so that parsing failures on individual plugins does not
+/// cause the entire plugin pack to fail to load.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PluginPack {
+    /// Name of the plugin pack, derived from the file name of the .nu file,
+    /// including the .nu extension. This field is not serialized.
+    pub name: String,
+
+    /// Plugins defined in this plugin pack, indexed by their name.
+    pub plugins: BTreeMap<String, Plugin>,
+}
+
+
+/// Represents a custom Nushell command that can be applied to a task's command
+/// to modify its behavior.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct Plugin {
-    /// Name of the plugin file under the plugin directory, including the .nu
-    /// extension. This field is not serialized.
+    /// Name of the plugin pack that contains this plugin, derived from the file
+    /// name of the .nu file. This field is not serialized.
     #[serde(skip)]
-    pub file_name: String,
+    pub pack: String,
 
     /// Name of the custom command in the plugin file to be used as a plugin.
-    #[serde(rename = "name")]
-    pub item_name: String,
+    pub name: String,
 
-    /// A short description of this plugin's behavior and purpose.
+    /// Optional description of this plugin's behavior and purpose.
     pub description: Option<String>,
 
     /// A list of args that this plugin accepts.
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_default")]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub args: Vec<PluginArg>,
 
     /// A list of flags that this plugin accepts.
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_default")]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub flags: Vec<PluginFlag>,
 }
 
-/// Represents a lookup table of plugins, indexed first by plugin file name and
-/// then by item name for easy retrieval.
-pub type PluginMap = BTreeMap<String, BTreeMap<String, Plugin>>;
-
-/// Represents a flag that a Nushell custom command accepts.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[derive(Deserialize, Serialize)]
-pub struct PluginFlag {
-    pub name: String,
-    pub description: Option<String>,
-}
-
+/// Represents an argument that a Nushell custom command accepts.
+///
+/// [`PluginArg`]s are by default required and can be marked optional by
+/// setting the `optional` field to `true`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct PluginArg {
+    /// Name of the argument. Must be in cabab-case as is required by Nushell's
+    /// syntax for named arguments.
     pub name: String,
+
+    /// Optional description of this argument and its purpose.
     pub description: Option<String>,
 
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_default")]
-    pub required: bool,
+    /// Whether this argument is optional or required. By default, all arguments
+    /// are required.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub optional: bool,
 
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_default")]
-    pub accepted_values: Vec<String>,
+    /// Lists accepted values for this argument, or omitted if arbitrary values
+    /// are accepted.
+    ///
+    /// Note that `Some(vec![])` (an empty list of accepted values) is different
+    /// from `None` and rejects all values.
+    pub accepted_values: Option<Vec<String>>,
+}
+
+/// Represents an optional flag that a Nushell custom command accepts.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize)]
+pub struct PluginFlag {
+    /// Name of the flag. Must be in cabab-case as is required by Nushell's syntax
+    /// for boolean arguments.
+    pub name: String,
+
+    /// Optional description of this flag and its purpose.
+    pub description: Option<String>,
 }
 
 /// Represents a specific instance of a plugin applied to a task, including
@@ -113,23 +141,35 @@ pub struct PluginArg {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct PluginInstance {
-    pub file_name: String,
-    pub item_name: String,
+    /// Name of the plugin pack derived from the file name of the .nu file,
+    /// including the .nu extension.
+    pub pack: String,
 
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_default")]
+    /// Name of the custom command in the plugin file to be used as a plugin.
+    pub name: String,
+
+    /// Whether this plugin instance is enabled.
+    ///
+    /// This provides a convenient way to temporarily disable a plugin without
+    /// having to remove it from the task.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub enabled: bool,
+
+    /// Argument assignments for this plugin instance.
+    #[serde(default, skip_serializing_if = "is_default")]
     pub args: BTreeMap<String, String>,
 
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_default")]
+    /// Flags enabled for this plugin instance.
+    #[serde(default, skip_serializing_if = "is_default")]
     pub flags: Vec<String>,
 }
 
 impl PluginInstance {
-    pub fn new(path: &str, name: &str) -> Self {
+    pub fn new<S: Into<String>>(pack: S, name: S) -> Self {
         Self {
-            file_name: path.into(),
-            item_name: name.into(),
+            pack: pack.into(),
+            name: name.into(),
+            enabled: true,
             args: BTreeMap::new(),
             flags: Vec::new(),
         }

@@ -26,10 +26,10 @@ pub fn nav_ui(
         |flex| {
             let plugin_count =
                 engine
-                    .plugins()
+                    .plugin_packs()
                     .values()
-                    .flatten()
-                    .count();
+                    .map(|pack| pack.plugins.len())
+                    .sum::<usize>();
             flex.add(
                 item().grow(1.0),
                 Button::new("")

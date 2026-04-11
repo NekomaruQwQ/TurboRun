@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::prelude::*;
 use std::io;
 use std::path::Path;
@@ -91,7 +92,7 @@ impl TaskWorker {
         self.task = task;
     }
 
-    pub fn status(&self, plugins: &PluginMap) -> TaskStatus {
+    pub fn status(&self, plugins: &BTreeMap<String, PluginPack>) -> TaskStatus {
         if !self.is_valid(plugins) {
             TaskStatus::Invalid
         } else if self.is_running() {
@@ -107,7 +108,7 @@ impl TaskWorker {
         }
     }
 
-    fn is_valid(&self, plugins: &PluginMap) -> bool {
+    fn is_valid(&self, plugins: &BTreeMap<String, PluginPack>) -> bool {
         !self.task.name.trim().is_empty() &&
         !self.task.command.trim().is_empty() && {
             self.task
@@ -116,18 +117,21 @@ impl TaskWorker {
                 .map(|inst| -> anyhow::Result<()> {
                     let plugin =
                         plugins
-                            .get(&inst.file_name)
+                            .get(&inst.pack)
                             .context("plugin file not found")?
-                            .get(&inst.item_name)
+                            .plugins
+                            .get(&inst.name)
                             .context("plugin item not found")?;
                     for arg in &plugin.args {
-                        if arg.required && !inst.args.contains_key(&arg.name) {
-                            anyhow::bail!("missing required argument \"{}\" for plugin \"{}\"", arg.name, plugin.item_name);
+                        if !arg.optional && !inst.args.contains_key(&arg.name) {
+                            anyhow::bail!("missing required argument \"{}\" for plugin \"{}\"", arg.name, plugin.name);
                         }
 
                         if let Some(arg_value) = inst.args.get(&arg.name) {
-                            if !arg.accepted_values.is_empty() && !arg.accepted_values.contains(arg_value) {
-                                anyhow::bail!("invalid value \"{}\" for argument \"{}\" of plugin \"{}\"", arg_value, arg.name, plugin.item_name);
+                            if let Some(ref accepted) = arg.accepted_values {
+                                if !accepted.contains(arg_value) {
+                                    anyhow::bail!("invalid value \"{}\" for argument \"{}\" of plugin \"{}\"", arg_value, arg.name, plugin.name);
+                                }
                             }
                         }
                     }
@@ -183,7 +187,7 @@ impl TaskWorker {
     }
 
     #[expect(clippy::panic_in_result_fn, reason = "precondition check")]
-    pub fn run(&mut self, plugin_dir: &Path, plugins: &PluginMap)
+    pub fn run(&mut self, plugin_dir: &Path, plugins: &BTreeMap<String, PluginPack>)
      -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");

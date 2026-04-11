@@ -3,12 +3,24 @@
 /// Two IDs collide with probability ~1 / 2^32 per pair — negligible
 /// for a desktop app with ~dozens of tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub struct TaskId(pub u32);
 
 impl TaskId {
     /// Generates a random ID using [`fastrand`] under the hood.
     pub fn random() -> Self {
         Self(fastrand::u32(..))
+    }
+
+    pub fn random_except<F>(except: F) -> Self
+    where
+        F: Fn(&Self) -> bool {
+        loop {
+            let id = Self::random();
+            if !except(&id) {
+                return id;
+            }
+        }
     }
 }
 

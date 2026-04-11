@@ -1,11 +1,8 @@
-use std::time::SystemTime;
+use std::collections::BTreeMap;
 
 use egui::*;
 
-use super::color;
 use crate::data::*;
-use crate::data::Plugin;
-
 use super::*;
 
 /// Renders the task editor page for `editor` and reports the user's intent
@@ -20,7 +17,7 @@ use super::*;
 pub fn task_editor_ui(
     ui: &mut Ui,
     view: &mut ViewContext,
-    plugins: &PluginMap,
+    plugins: &BTreeMap<String, PluginPack>,
     task: &mut Task,
     is_existing: bool) {
     ui.separator();
@@ -111,87 +108,176 @@ pub fn task_editor_ui(
     ui.horizontal(|ui| {
         ui.label("Plugins");
         if ui.small_button(format!("{}  Add plugin", nf::fa::FA_PLUS)).clicked() {
-            // Default to the first available plugin name; if none are loaded
-            // we still let the user add a row, which will surface as missing
-            // and prompt them to fix the plugin directory / config.
-            task.plugins.push(PluginInstance::new("base.nu".into(), "noop".into()));
+            // `base.nu / noop` is the deliberate no-op placeholder that newly
+            // added rows start from — picked over "first available plugin"
+            // because it's the one that does nothing if the user doesn't
+            // bother to swap it.
+            task.plugins.push(PluginInstance::new("base.nu", "noop"));
         }
     });
 
-    // Deferred mutations collected during the render loop, applied below.
+    // Deferred row-level mutations collected during the render loop, applied
+    // after the borrow on `task.plugins` is released.
     let mut to_remove_plugin: Option<usize> = None;
     let mut to_move_up:       Option<usize> = None;
     let mut to_move_down:     Option<usize> = None;
 
     for (idx, inst) in task.plugins.iter_mut().enumerate() {
-        // push_id keeps each plugin row's child widget IDs stable as plugins
-        // are added/removed at other indices.
-        // ui.push_id(idx, |ui| {
-        //     ui.group(|ui| {
-        //         ui.horizontal(|ui| {
-        //             let missing =
-        //                 !plugins
-        //                     .iter()
-        //                     .any(|&plugin| {
-        //                         plugin.file_name == inst.file_name &&
-        //                         plugin.item_name == inst.item_name
-        //                     });
-        //             let label = if missing {
-        //                 RichText::new(format!("{} (missing)", inst.item_name))
-        //                     .color(color::ORANGE)
-        //             } else {
-        //                 RichText::new(&inst.item_name)
-        //             };
+        // push_id keeps each row's child widget IDs stable as plugins are
+        // added/removed/reordered at other indices.
+        ui.push_id(idx, |ui| {
+            ui.group(|ui| {
+                // — Header row —
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut inst.enabled, "")
+                        .on_hover_text("Enabled");
 
-        //             ComboBox::from_id_salt("plugin_combo")
-        //                 .selected_text(label)
-        //                 .show_ui(ui, |ui| {
-        //                     for plugin in plugins {
-        //                         ui.selectable_value(&mut inst.item_name, plugin.name.clone(), &plugin.name);
-        //                     }
-        //                 });
+                    ui.label(nf::fa::FA_PUZZLE_PIECE);
 
-        //             if ui.small_button(nf::fa::FA_ARROW_UP).on_hover_text("Move up").clicked() {
-        //                 to_move_up = Some(idx);
-        //             }
-        //             if ui.small_button(nf::fa::FA_ARROW_DOWN).on_hover_text("Move down").clicked() {
-        //                 to_move_down = Some(idx);
-        //             }
-        //             if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove plugin").clicked() {
-        //                 to_remove_plugin = Some(idx);
-        //             }
-        //         });
+                    let known_before =
+                        plugins
+                            .get(&inst.pack)
+                            .and_then(|pack| pack.plugins.get(&inst.name))
+                            .is_some();
+                    let selected_text = if known_before {
+                        RichText::new(format!("{} / {}", inst.pack, inst.name))
+                    } else {
+                        RichText::new(format!("{} / {} (missing)", inst.pack, inst.name))
+                            .color(color::ORANGE)
+                    };
 
-        //         ui.weak("keys must match {{name}} placeholders in the plugin source");
+                    ComboBox::from_id_salt("plugin_select")
+                        .selected_text(selected_text)
+                        .show_ui(ui, |ui| {
+                            for (pack_name, pack) in plugins {
+                                for (plugin_name, plugin) in &pack.plugins {
+                                    let selected =
+                                        inst.pack == *pack_name &&
+                                        inst.name == *plugin_name;
+                                    let label = format!("{pack_name} / {plugin_name}");
+                                    if ui.selectable_label(selected, label).clicked() && !selected {
+                                        inst.pack.clone_from(pack_name);
+                                        inst.name.clone_from(plugin_name);
+                                        // Drop any args/flags that the new plugin no longer
+                                        // declares — silently keeping them would leak orphan
+                                        // entries into the saved config. Args/flags whose names
+                                        // exist on both sides are preserved on purpose so that
+                                        // common conventions (e.g. `--unit`) survive a swap.
+                                        inst.args.retain(|key, _| plugin.args.iter().any(|a| &a.name == key));
+                                        inst.flags.retain(|f| plugin.flags.iter().any(|pf| &pf.name == f));
+                                    }
+                                }
+                            }
+                        });
 
-        //         for (row_idx, &mut (ref mut key, ref mut value)) in inst.vars.iter_mut().enumerate() {
-        //             ui.push_id(row_idx, |ui| {
-        //                 ui.horizontal(|ui| {
-        //                     ui.add(
-        //                         TextEdit::singleline(key)
-        //                             .hint_text("name")
-        //                             .desired_width(120.0));
-        //                     ui.add(
-        //                         TextEdit::singleline(value)
-        //                             .hint_text("value")
-        //                             .desired_width(180.0));
-        //                     if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove var").clicked() {
-        //                         to_remove_var = Some((idx, row_idx));
-        //                     }
-        //                 });
-        //             });
-        //         }
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove plugin").clicked() {
+                            to_remove_plugin = Some(idx);
+                        }
+                        if ui.small_button(nf::fa::FA_ARROW_DOWN).on_hover_text("Move down").clicked() {
+                            to_move_down = Some(idx);
+                        }
+                        if ui.small_button(nf::fa::FA_ARROW_UP).on_hover_text("Move up").clicked() {
+                            to_move_up = Some(idx);
+                        }
+                    });
+                });
 
-        //         if ui.small_button(format!("{}  Add var", nf::fa::FA_PLUS)).clicked() {
-        //             to_add_var = Some(idx);
-        //         }
-        //     });
-        // });
+                // Re-look-up the plugin def *after* the selector so that
+                // changing the selection takes effect this frame and we
+                // don't render args/flags that the just-pruned `inst` no
+                // longer carries.
+                let Some(plugin) =
+                    plugins
+                        .get(&inst.pack)
+                        .and_then(|pack| pack.plugins.get(&inst.name))
+                else {
+                    return;
+                };
+
+                // — Args grid —
+                if !plugin.args.is_empty() {
+                    Grid::new("plugin_args")
+                        .num_columns(2)
+                        .spacing([12.0, 4.0])
+                        .show(ui, |ui| {
+                            for arg in &plugin.args {
+                                ui.horizontal(|ui| {
+                                    let label_resp = ui.label(&arg.name);
+                                    if !arg.optional {
+                                        ui.label(RichText::new("*").color(color::RED));
+                                    }
+                                    if let Some(desc) = arg.description.as_deref() {
+                                        let _ = label_resp.on_hover_text(desc);
+                                    }
+                                });
+
+                                // Buffered edit: bind the widget to a local
+                                // string and only write back on change. This
+                                // avoids materializing empty entries into
+                                // `inst.args` for every optional arg the user
+                                // never touched, keeping the saved TOML clean.
+                                let mut value: String =
+                                    inst.args.get(&arg.name).cloned().unwrap_or_default();
+                                let changed = match arg.accepted_values {
+                                    None => {
+                                        ui.add(
+                                            TextEdit::singleline(&mut value)
+                                                .desired_width(f32::INFINITY))
+                                            .changed()
+                                    }
+                                    Some(ref accepted) => {
+                                        let mut changed = false;
+                                        ComboBox::from_id_salt(arg.name.as_str())
+                                            .selected_text(&value)
+                                            .show_ui(ui, |ui| {
+                                                for choice in accepted {
+                                                    if ui.selectable_value(&mut value, choice.clone(), choice).changed() {
+                                                        changed = true;
+                                                    }
+                                                }
+                                            });
+                                        changed
+                                    }
+                                };
+                                if changed {
+                                    if value.is_empty() {
+                                        inst.args.remove(&arg.name);
+                                    } else {
+                                        inst.args.insert(arg.name.clone(), value);
+                                    }
+                                }
+                                ui.end_row();
+                            }
+                        });
+                }
+
+                // — Flags row —
+                if !plugin.flags.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for flag in &plugin.flags {
+                            let was = inst.flags.contains(&flag.name);
+                            let mut on = was;
+                            let resp = ui.checkbox(&mut on, &flag.name);
+                            if let Some(desc) = flag.description.as_deref() {
+                                let _ = resp.on_hover_text(desc);
+                            }
+                            if on != was {
+                                if on {
+                                    inst.flags.push(flag.name.clone());
+                                } else {
+                                    inst.flags.retain(|f| f != &flag.name);
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        });
     }
 
-    // Apply deferred plugin/var mutations. Order matters only insofar as we
-    // never apply two conflicting actions in the same frame — clicks are
-    // mutually exclusive within a single render pass.
+    // Apply deferred plugin mutations. Clicks are mutually exclusive within a
+    // single render pass so the order of these branches doesn't matter.
     if let Some(i) = to_remove_plugin {
         task.plugins.remove(i);
     }

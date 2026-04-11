@@ -14,7 +14,7 @@ use crate::plugin::*;
 use crate::worker::*;
 
 pub struct TaskEngine {
-    plugins: PluginMap,
+    plugin_packs: BTreeMap<String, PluginPack>,
     tasks: HashMap<TaskId, TaskWorker>,
 
     config_path: PathBuf,
@@ -24,7 +24,7 @@ pub struct TaskEngine {
 impl TaskEngine {
     pub fn new(config_path: &Path, plugin_dir: &Path) -> Self {
         let mut engine = Self {
-            plugins: BTreeMap::new(),
+            plugin_packs: BTreeMap::new(),
             tasks: HashMap::new(),
             config_path: config_path.to_owned(),
             plugin_dir: plugin_dir.to_owned(),
@@ -61,8 +61,8 @@ impl TaskEngine {
         &self.plugin_dir
     }
 
-    pub const fn plugins(&self) -> &PluginMap {
-        &self.plugins
+    pub const fn plugin_packs(&self) -> &BTreeMap<String, PluginPack> {
+        &self.plugin_packs
     }
 
     pub fn tasks_sorted(&self) -> impl ExactSizeIterator<Item = &TaskWorker> {
@@ -75,15 +75,32 @@ impl TaskEngine {
         self.tasks
             .get(&task_id)
             .expect("invalid task_id")
-            .status(&self.plugins)
+            .status(&self.plugin_packs)
     }
 
     pub fn empty_task(&self) -> Task {
-        loop {
-            let task = Task::empty();
-            if !self.tasks.keys().contains(&task.id) {
-                break task;
-            }
+        Task {
+            id: TaskId::random_except(|id| self.tasks.contains_key(id)),
+            name: String::from("New Task"),
+            command: String::new(),
+            plugins: Vec::new(),
+        }
+    }
+
+    pub fn example_task(&self) -> Task {
+        Task {
+            id: TaskId::random_except(|id| self.tasks.contains_key(&id)),
+            name: String::from("Example Task"),
+            command: String::from("print \"Hello, TurboRun!\""),
+            plugins: vec![
+                PluginInstance {
+                    pack: String::from("base.nu"),
+                    name: String::from("time"),
+                    enabled: true,
+                    args: [("unit".into(), "s".into())].into(),
+                    flags: [].into(),
+                }
+            ],
         }
     }
 
@@ -125,7 +142,7 @@ impl TaskEngine {
                 .transpose()
                 .context("toml::from_str failed")?
                 .unwrap_or_else(|| Config {
-                    tasks: vec![Task::example()],
+                    tasks: vec![self.example_task()],
                 });
         self.tasks =
             config.tasks
@@ -153,7 +170,10 @@ impl TaskEngine {
     }
 
     pub fn scan_plugins(&mut self) -> anyhow::Result<()> {
-        self.plugins = scan_plugins(&self.plugin_dir)?;
+        self.plugin_packs =
+            scan_plugins(&self.plugin_dir)?
+                .map(|pack| (pack.name.clone(), pack))
+                .collect();
         Ok(())
     }
 
@@ -178,7 +198,7 @@ impl TaskEngine {
         self.tasks
             .get_mut(&task_id)
             .expect("task_id must be valid")
-            .run(&self.plugin_dir, &self.plugins)
+            .run(&self.plugin_dir, &self.plugin_packs)
     }
 
     /// Stops the given task if it is running.

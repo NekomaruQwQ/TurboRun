@@ -59,7 +59,7 @@ pub fn app_ui(ui: &mut egui::Ui, page: &mut Page, engine: &TaskEngine)
                         page::task_editor_ui(
                             ui,
                             &mut view,
-                            engine.plugins(),
+                            engine.plugin_packs(),
                             task,
                             engine.task(task.id).is_some()),
                 }));
