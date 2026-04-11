@@ -82,7 +82,7 @@ impl TaskEngine {
     pub fn empty_task(&self) -> Task {
         Task {
             id: TaskId::random_except(|id| self.tasks.contains_key(id)),
-            name: SmolStr::new_static("New Task"),
+            name: String::from("New Task"),
             command: String::new(),
             plugins: Vec::new(),
         }
@@ -90,8 +90,8 @@ impl TaskEngine {
 
     pub fn example_task(&self) -> Task {
         Task {
-            id: TaskId::random_except(|id| self.tasks.contains_key(&id)),
-            name: SmolStr::new_static("Example Task"),
+            id: TaskId::random_except(|id| self.tasks.contains_key(id)),
+            name: String::from("Example Task"),
             command: String::from("print \"Hello, TurboRun!\""),
             plugins: vec![
                 PluginInstance {
@@ -199,7 +199,7 @@ impl TaskEngine {
         self.tasks
             .get_mut(&task_id)
             .expect("task_id must be valid")
-            .run(&self.plugin_dir, &self.plugin_packs)
+            .run(&self.plugin_packs)
     }
 
     /// Stops the given task if it is running.

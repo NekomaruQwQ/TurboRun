@@ -19,6 +19,7 @@ derive_setters = "0.1.9"
 egui_flex = "0.6.0"
 euclid = "0.22.14"
 fastrand = "2.4.0"
+garde = { version = "0.22", features = ["derive"] }
 itertools = "0.14.0"
 log = "0.4.29"
 nerd-font-symbols = "0.3.0"

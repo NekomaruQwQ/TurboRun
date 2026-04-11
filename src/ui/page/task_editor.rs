@@ -89,18 +89,9 @@ pub fn task_editor_ui(
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
             ui.label("Name");
-            // Buffered edit: egui's `TextEdit` needs `&mut dyn TextBuffer`,
-            // which `SmolStr` does not implement. Bind the widget to a local
-            // `String` and write back on change — same pattern used below
-            // for plugin arg values.
-            let mut name_buf: String = task.name.to_string();
-            if ui.add(
-                TextEdit::singleline(&mut name_buf)
-                    .desired_width(f32::INFINITY))
-                .changed()
-            {
-                task.name = SmolStr::from(name_buf.as_str());
-            }
+            ui.add(
+                TextEdit::singleline(&mut task.name)
+                    .desired_width(f32::INFINITY));
             ui.end_row();
 
             ui.label("Command");
@@ -217,8 +208,8 @@ pub fn task_editor_ui(
                                     if !arg.optional {
                                         ui.label(RichText::new("*").color(color::RED));
                                     }
-                                    if let Some(desc) = arg.description.as_deref() {
-                                        let _ = label_resp.on_hover_text(desc);
+                                    if !arg.description.is_empty() {
+                                        let _ = label_resp.on_hover_text(&arg.description);
                                     }
                                 });
 
@@ -271,8 +262,8 @@ pub fn task_editor_ui(
                             let was = inst.flags.contains(&flag.name);
                             let mut on = was;
                             let resp = ui.checkbox(&mut on, flag.name.as_str());
-                            if let Some(desc) = flag.description.as_deref() {
-                                let _ = resp.on_hover_text(desc);
+                            if !flag.description.is_empty() {
+                                let _ = resp.on_hover_text(&flag.description);
                             }
                             if on != was {
                                 if on {

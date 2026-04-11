@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::prelude::*;
 use std::io;
-use std::path::Path;
 use std::process::*;
 use std::sync::mpsc;
 use std::thread;
@@ -9,6 +8,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Context as _;
+use garde::Validate as _;
 use smol_str::SmolStr;
 
 use crate::data::*;
@@ -110,37 +110,11 @@ impl TaskWorker {
     }
 
     fn is_valid(&self, plugins: &BTreeMap<SmolStr, PluginPack>) -> bool {
-        !self.task.name.trim().is_empty() &&
-        !self.task.command.trim().is_empty() && {
-            self.task
-                .plugins
-                .iter()
-                .map(|inst| -> anyhow::Result<()> {
-                    let plugin =
-                        plugins
-                            .get(&inst.pack)
-                            .context("plugin file not found")?
-                            .plugins
-                            .get(&inst.name)
-                            .context("plugin item not found")?;
-                    for arg in &plugin.args {
-                        if !arg.optional && !inst.args.contains_key(&arg.name) {
-                            anyhow::bail!("missing required argument \"{}\" for plugin \"{}\"", arg.name, plugin.name);
-                        }
-
-                        if let Some(arg_value) = inst.args.get(&arg.name) {
-                            if let Some(ref accepted) = arg.accepted_values {
-                                if !accepted.contains(arg_value) {
-                                    anyhow::bail!("invalid value \"{}\" for argument \"{}\" of plugin \"{}\"", arg_value, arg.name, plugin.name);
-                                }
-                            }
-                        }
-                    }
-
-                    Ok(())
-                })
-                .all(|result| result.is_ok())
-        }
+        // Delegates to the `garde::Validate` impl on `Task`. The structured
+        // report is discarded here because callers only need a yes/no signal;
+        // the editor UI calls `Task::validate_with` directly to surface
+        // per-field errors.
+        self.task.plugins.iter().all(|inst| inst.validate_with(plugins).is_ok())
     }
 
     pub fn update(&mut self) {
@@ -188,14 +162,14 @@ impl TaskWorker {
     }
 
     #[expect(clippy::panic_in_result_fn, reason = "precondition check")]
-    pub fn run(&mut self, plugin_dir: &Path, plugins: &BTreeMap<SmolStr, PluginPack>)
+    pub fn run(&mut self, plugins: &BTreeMap<SmolStr, PluginPack>)
      -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");
 
         let script =
             apply_plugins(
-                plugin_dir,
+                plugins,
                 &self.task.command,
                 &self.task.plugins)?;
         log::info!("running task \"{}\" with script: >>>\n{script}\n<<<", self.task.name);

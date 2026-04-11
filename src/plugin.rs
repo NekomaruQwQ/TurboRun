@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -29,11 +30,9 @@ fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
     use toml::Value as TomlValue;
     use toml::Table as TomlTable;
 
-    let file_name =
-        path.file_name()
-            .expect("@logicError unexpected path");
-    let file_name: SmolStr =
-        file_name
+    let pack_name: SmolStr =
+        path.file_stem()
+            .expect("@logicError unexpected path")
             .to_str()
             .context("file name is not valid utf-8")?
             .into();
@@ -70,21 +69,23 @@ fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
         })
         .map(|plugin| (plugin.name.clone(), plugin))
         .pipe(|plugins| PluginPack {
-            name: file_name.clone(),
+            path: path.to_path_buf(),
+            name: pack_name,
             plugins: plugins.collect(),
         })
         .pipe(Ok)
 }
 
 pub fn apply_plugins(
-    plugin_dir: &Path,
+    plugin_packs: &BTreeMap<SmolStr, PluginPack>,
     source: &str,
     plugins: &[PluginInstance])
  -> anyhow::Result<String> {
     let mut out = Vec::new();
-    for &PluginInstance { pack: ref file_name, .. } in plugins {
-        file_name
-            .pipe(|file_name| plugin_dir.join(file_name))
+    for inst in plugins {
+        plugin_packs.get(&inst.pack)
+            .map(|pack| pack.path.clone())
+            .ok_or_else(|| anyhow::anyhow!("plugin pack \"{}\" not found", inst.pack))?
             .pipe(|path| path.to_str().expect("@logicError invalid plugin_dir").to_owned())
             .pipe(|path| path.replace('\\', "/"))
             .pipe(|path| format!("use \"{path}\""))
@@ -98,9 +99,7 @@ pub fn apply_plugins(
     for inst in plugins {
         let mut line = format!(
             "{} {} $__closure_{}",
-            inst.pack
-                .strip_suffix(".nu")
-                .expect("@logicError invalid file_name"),
+            inst.pack,
             inst.name,
             i - 1);
         for (key, value) in &inst.args {
