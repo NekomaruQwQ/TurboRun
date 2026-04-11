@@ -41,8 +41,8 @@ TurboRun follows three principles:
 
 3. **Compose, don't configure.** Instead of accumulating optional feature flags
    on a task struct, TurboRun uses a plugin system where each "feature" is a
-   plain `.nu` template that wraps the user's command. Adding capabilities means
-   adding `.nu` files, not modifying Rust code.
+   plain `.nu` function that accepts the user's command as a closure and wraps it.
+   Adding capabilities means adding `.nu` files, not modifying Rust code.
 
 ## Architecture
 
@@ -128,12 +128,9 @@ Behavioral differences live in the nu plugins that wrap the command.
 A task definition is minimal:
 
 - **name** — display name
-- **command** — the nu command to run (fills the `{{command}}` blank)
-- **plugins** — ordered list of plugin names to compose around the command
-- **plugin_params** — values for each plugin's template blanks
-- **last_modified** — milliseconds since Unix epoch, for change detection
-- **last_reviewed** — milliseconds since Unix epoch; user must review the
-  fully composed script before execution after any change
+- **command** — the nu command to run, passed as a closure to the innermost plugin
+- **plugins** — ordered list of plugin instances `(file_name, item_name, args, flags)`
+  to compose around the command
 
 No `auto_restart`. No `interval`. No `env_vars`. No `pre_command`. No `shell`.
 No `working_directory`. No `enabled`. These are all plugin concerns or future
@@ -142,72 +139,110 @@ feature flags because the plugin system makes them unnecessary.
 
 ## Plugin System
 
-### Plugins are templates
+### Plugins are Nushell functions
 
-A plugin is a `.nu` file with `{{xxx}}` blanks. Composition is string
-substitution — literally `str::replace` in a loop. There is no template logic,
-no conditionals, no defaults, no nested evaluation. If someone needs conditional
-behavior, that is nu code *inside* the template, not template-level logic.
+A plugin is an `export def` command in a `.nu` file that accepts a `closure` as its
+first positional argument. The convention is that the plugin calls `do $command`,
+surrounding it with whatever behavior it adds.
 
-The `{{xxx}}` syntax was chosen because double braces have no meaning in nu
-(single braces are used for blocks, records, closures, and string interpolation),
-it is a universally recognized convention (Mustache, Handlebars, Jinja2, Tera,
-Just), and unfilled blanks cause nu's parser to reject the script before
-execution — providing free validation. The reserved placeholder `{{command}}`
-is used for composing the inner command into each plugin layer.
-
-### Example plugins
-
-**retry.nu** — periodic retry with configurable interval:
 ```nu
-loop {
-  {{command}}
-  sleep {{interval}}
+export def time [command: closure, --unit: string = "ms"]: nothing -> nothing {
+    let start = date now
+    do $command
+    let elapsed = (date now) - $start
+    print --stderr $"finished in ($elapsed | format duration $unit)"
 }
 ```
 
-**healthcheck.nu** — run command then verify health:
+Any exported command following this signature can serve as a plugin — Nushell itself
+validates the call site, so type mismatches are caught before execution rather than
+producing silent wrong output.
+
+### Metadata via `#?` annotations
+
+Plugin metadata (name, description, args, flags) is declared inline in the `.nu` file
+using `#?` comment lines, which TurboRun concatenates and parses as TOML:
+
 ```nu
-{{command}}
-if not ({{check}}) { exit 1 }
+#? [[plugins]]
+#? name = "time"
+#? description = "Measures the execution time of a command and prints it to stderr."
+
+#? [[plugins.args]]
+#? name = "unit"
+#? optional = true
+```
+
+TurboRun reads these annotations at scan time to populate the plugin browser and validate
+task configurations — without executing any Nushell code. The `#?` prefix was chosen so
+annotations are inert comment lines in a normal Nu session.
+
+### Multiple plugins per file
+
+A single `.nu` file can export multiple plugin commands. The built-in `base.nu` ships
+`noop` and `time`. A `PluginInstance` references a specific `(file_name, item_name)` pair,
+so multiple plugins from the same file can appear in one task's plugin list.
+
+### Composition via closure chain
+
+`apply_plugins()` generates a Nushell script by layering closures. For a task with command
+`my-server` and plugins `[{base.nu/time --unit s}]`:
+
+```nu
+use "path/to/plugins/base.nu"
+let __closure_0 = { my-server }
+let __closure_1 = { base time $__closure_0 --unit "s" }
+do $__closure_1
+```
+
+The first plugin in the list is innermost (wraps the command directly); the last is
+outermost (the final `do` call). Nu evaluates this as a normal closure chain — no Rust
+string manipulation, no hidden eval.
+
+### Example plugins
+
+**retry.nu** — periodic retry on failure:
+```nu
+#? [[plugins]]
+#? name = "retry"
+#? description = "Retries the command on failure after a configurable interval."
+
+#? [[plugins.args]]
+#? name = "interval"
+#? optional = true
+
+export def retry [command: closure, --interval: duration = 5sec]: nothing -> nothing {
+    loop {
+        try { do $command }
+        sleep $interval
+    }
+}
 ```
 
 **env.nu** — inject environment variables:
 ```nu
-with-env { {{env_block}} } {
-  {{command}}
+#? [[plugins]]
+#? name = "with-env"
+#? description = "Runs the command with additional environment variables."
+
+#? [[plugins.args]]
+#? name = "vars"
+
+export def "with-env" [command: closure, --vars: record]: nothing -> nothing {
+    with-env $vars { do $command }
 }
 ```
 
-**pwsh.nu** — delegate to PowerShell (must be innermost plugin):
-```nu
-^pwsh -C "{{command}}"
-```
-
-### Composition
-
-Plugins compose by nesting. The engine walks the plugin list inside-out,
-substituting `{{command}}` at each layer. The first plugin in the list is the
-innermost wrapper around the command, and the last is the outermost.
-
-For a task with plugins `[env, retry]` and command `my-server`:
-
-1. Start with: `my-server`
-2. Apply `env` (innermost): `with-env { PORT: "3000" } { my-server }`
-3. Apply `retry` (outermost): `loop { with-env { PORT: "3000" } { my-server }; sleep 5sec }`
-
-The outermost result is what gets passed to `nu -c`.
-
 ### Preview, not magic
 
-TurboRun always shows the fully composed nu script before execution. A preview
+TurboRun always shows the fully composed Nu script before execution. A preview
 panel displays the final generated code. No hidden transforms — if the user can
 read it, they can debug it. This is non-negotiable.
 
 ### No in-app editor
 
 TurboRun will never include a code editor. Plugins are authored externally
-(VSCode, any editor with nu support) and TurboRun references them by path. The
+(VSCode, any editor with Nu support) and TurboRun references them by path. The
 app's role is strictly compose and execute — competing with VSCode on editing
 would be a losing battle that distracts from the core product.
 
@@ -239,23 +274,6 @@ injection, timers, etc. — would produce a tool that does a strict subset of
 pm2 with a GUI. Binding to nu means the engine stays tiny (four
 responsibilities) while supporting unbounded functionality through composition.
 This is the architectural story that makes TurboRun interesting.
-
-### What about non-nu users
-
-Even shell selection is a plugin, not an engine concern. A `pwsh.nu` plugin:
-```nu
-^pwsh -C "{{command}}"
-```
-
-Applied as the innermost plugin (first in the list), this wraps the raw command
-in a PowerShell invocation — but nu remains the universal launcher. The engine
-always calls `nu -c` on the final composed script. There is no `shell` field on
-the task struct, no branching in the engine. Non-nu commands are just nu invoking
-an external shell via the `^` operator.
-
-This means TurboRun degrades gracefully for non-nu users: they get raw command
-execution through a shell plugin, without template composition from the broader
-plugin system. The engine never needs to know the difference.
 
 ## Process Lifecycle
 
@@ -311,8 +329,8 @@ optimized for human authoring.
 
 TOML is the default choice. The data model is simple (flat list of tasks with a
 few fields each), TOML round-trips trivially with serde, it is human-readable
-for debugging, and it is already used for plugin metadata (`.meta.toml`
-sidecars), keeping the tooling unified on a single format.
+for debugging, and it is already used for plugin metadata (inline `#?` annotations), keeping the
+tooling unified on a single format.
 
 ### Don't let serialization drive the data model
 
