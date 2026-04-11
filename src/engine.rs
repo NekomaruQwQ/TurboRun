@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::Context as _;
 use itertools::Itertools as _;
+use smol_str::SmolStr;
 use tap::prelude::*;
 
 use crate::util::*;
@@ -14,7 +15,7 @@ use crate::plugin::*;
 use crate::worker::*;
 
 pub struct TaskEngine {
-    plugin_packs: BTreeMap<String, PluginPack>,
+    plugin_packs: BTreeMap<SmolStr, PluginPack>,
     tasks: HashMap<TaskId, TaskWorker>,
 
     config_path: PathBuf,
@@ -61,7 +62,7 @@ impl TaskEngine {
         &self.plugin_dir
     }
 
-    pub const fn plugin_packs(&self) -> &BTreeMap<String, PluginPack> {
+    pub const fn plugin_packs(&self) -> &BTreeMap<SmolStr, PluginPack> {
         &self.plugin_packs
     }
 
@@ -81,7 +82,7 @@ impl TaskEngine {
     pub fn empty_task(&self) -> Task {
         Task {
             id: TaskId::random_except(|id| self.tasks.contains_key(id)),
-            name: String::from("New Task"),
+            name: SmolStr::new_static("New Task"),
             command: String::new(),
             plugins: Vec::new(),
         }
@@ -90,12 +91,12 @@ impl TaskEngine {
     pub fn example_task(&self) -> Task {
         Task {
             id: TaskId::random_except(|id| self.tasks.contains_key(&id)),
-            name: String::from("Example Task"),
+            name: SmolStr::new_static("Example Task"),
             command: String::from("print \"Hello, TurboRun!\""),
             plugins: vec![
                 PluginInstance {
-                    pack: String::from("base.nu"),
-                    name: String::from("time"),
+                    pack: SmolStr::new_static("base.nu"),
+                    name: SmolStr::new_static("time"),
                     enabled: true,
                     args: [("unit".into(), "s".into())].into(),
                     flags: [].into(),

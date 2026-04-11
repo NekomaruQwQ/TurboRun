@@ -99,7 +99,7 @@ fn nav_task_ui(
             flex.add(
                 item().grow(1.0),
                 Button::new("")
-                    .left_text(&task.name)
+                    .left_text(task.name.as_str())
                     .selected(task_selected))
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()

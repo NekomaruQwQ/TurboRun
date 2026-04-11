@@ -9,6 +9,7 @@ mod ext;
 use std::collections::BTreeMap;
 
 use serde::*;
+use smol_str::SmolStr;
 
 use crate::util::is_default;
 
@@ -40,9 +41,13 @@ pub struct Task {
     pub id: TaskId,
 
     /// The name of this task.
-    pub name: String,
+    pub name: SmolStr,
 
     /// The command to execute for this task.
+    ///
+    /// Kept as `String` (not `SmolStr`) because it is the `source` input to
+    /// the Nushell code generator and is bound directly to a multiline
+    /// `TextEdit` widget, whose `TextBuffer` trait `SmolStr` does not impl.
     pub command: String,
 
     /// Plugins to load for this task. See [`PluginInstance`] for details.
@@ -65,10 +70,10 @@ pub struct Task {
 pub struct PluginPack {
     /// Name of the plugin pack, derived from the file name of the .nu file,
     /// including the .nu extension. This field is not serialized.
-    pub name: String,
+    pub name: SmolStr,
 
     /// Plugins defined in this plugin pack, indexed by their name.
-    pub plugins: BTreeMap<String, Plugin>,
+    pub plugins: BTreeMap<SmolStr, Plugin>,
 }
 
 
@@ -80,13 +85,13 @@ pub struct Plugin {
     /// Name of the plugin pack that contains this plugin, derived from the file
     /// name of the .nu file. This field is not serialized.
     #[serde(skip)]
-    pub pack: String,
+    pub pack: SmolStr,
 
     /// Name of the custom command in the plugin file to be used as a plugin.
-    pub name: String,
+    pub name: SmolStr,
 
     /// Optional description of this plugin's behavior and purpose.
-    pub description: Option<String>,
+    pub description: Option<SmolStr>,
 
     /// A list of args that this plugin accepts.
     #[serde(default, skip_serializing_if = "is_default")]
@@ -106,10 +111,10 @@ pub struct Plugin {
 pub struct PluginArg {
     /// Name of the argument. Must be in cabab-case as is required by Nushell's
     /// syntax for named arguments.
-    pub name: String,
+    pub name: SmolStr,
 
     /// Optional description of this argument and its purpose.
-    pub description: Option<String>,
+    pub description: Option<SmolStr>,
 
     /// Whether this argument is optional or required. By default, all arguments
     /// are required.
@@ -121,7 +126,7 @@ pub struct PluginArg {
     ///
     /// Note that `Some(vec![])` (an empty list of accepted values) is different
     /// from `None` and rejects all values.
-    pub accepted_values: Option<Vec<String>>,
+    pub accepted_values: Option<Vec<SmolStr>>,
 }
 
 /// Represents an optional flag that a Nushell custom command accepts.
@@ -130,10 +135,10 @@ pub struct PluginArg {
 pub struct PluginFlag {
     /// Name of the flag. Must be in cabab-case as is required by Nushell's syntax
     /// for boolean arguments.
-    pub name: String,
+    pub name: SmolStr,
 
     /// Optional description of this flag and its purpose.
-    pub description: Option<String>,
+    pub description: Option<SmolStr>,
 }
 
 /// Represents a specific instance of a plugin applied to a task, including
@@ -143,10 +148,10 @@ pub struct PluginFlag {
 pub struct PluginInstance {
     /// Name of the plugin pack derived from the file name of the .nu file,
     /// including the .nu extension.
-    pub pack: String,
+    pub pack: SmolStr,
 
     /// Name of the custom command in the plugin file to be used as a plugin.
-    pub name: String,
+    pub name: SmolStr,
 
     /// Whether this plugin instance is enabled.
     ///
@@ -157,15 +162,15 @@ pub struct PluginInstance {
 
     /// Argument assignments for this plugin instance.
     #[serde(default, skip_serializing_if = "is_default")]
-    pub args: BTreeMap<String, String>,
+    pub args: BTreeMap<SmolStr, SmolStr>,
 
     /// Flags enabled for this plugin instance.
     #[serde(default, skip_serializing_if = "is_default")]
-    pub flags: Vec<String>,
+    pub flags: Vec<SmolStr>,
 }
 
 impl PluginInstance {
-    pub fn new<S: Into<String>>(pack: S, name: S) -> Self {
+    pub fn new<S: Into<SmolStr>>(pack: S, name: S) -> Self {
         Self {
             pack: pack.into(),
             name: name.into(),

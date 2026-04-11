@@ -29,8 +29,8 @@ impl App {
         use clap::Parser as _;
         use crate::*;
         let args = Args::parse();
-        let config_path = PathBuf::from(args.config_path);
-        let plugin_dir = PathBuf::from(args.plugin_dir);
+        let config_path = PathBuf::from(args.config_path.as_str());
+        let plugin_dir = PathBuf::from(args.plugin_dir.as_str());
         let engine = TaskEngine::new(&config_path, &plugin_dir);
         Self {
             engine,

@@ -1,3 +1,4 @@
+use smol_str::{SmolStr, format_smolstr};
 use tap::prelude::*;
 
 use egui::*;
@@ -32,13 +33,13 @@ pub fn app_ui(ui: &mut egui::Ui, page: &mut Page, engine: &TaskEngine)
                 .clone()
                 .pipe(|page| match page {
                     Page::Dashboard =>
-                        String::from("dashboard"),
+                        SmolStr::new_static("dashboard"),
                     Page::Plugins =>
-                        String::from("plugins"),
+                        SmolStr::new_static("plugins"),
                     Page::TaskViewer(task_id) =>
-                        format!("task_viewer_{task_id}"),
+                        format_smolstr!("task_viewer_{task_id}"),
                     Page::TaskEditor(task) =>
-                        format!("task_editor_{}", task.id),
+                        format_smolstr!("task_editor_{}", task.id),
                 })
                 .pipe(|hash| ui.push_id(hash, |ui| match *page {
                     Page::Dashboard =>

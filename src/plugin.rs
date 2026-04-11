@@ -6,6 +6,7 @@ use tap::prelude::*;
 use anyhow::Context as _;
 use itertools::Itertools as _;
 use serde::Deserialize as _;
+use smol_str::SmolStr;
 
 use crate::data::*;
 
@@ -31,11 +32,11 @@ fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
     let file_name =
         path.file_name()
             .expect("@logicError unexpected path");
-    let file_name =
+    let file_name: SmolStr =
         file_name
             .to_str()
             .context("file name is not valid utf-8")?
-            .to_owned();
+            .into();
     if !(
         path.is_file() &&
         path.extension().is_some_and(|ext| ext == "nu")) {

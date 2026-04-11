@@ -19,7 +19,7 @@ struct Args {
         long,
         env = "TURBORUN_CONFIG",
         default_value = "TurboRun.toml")]
-    config_path: String,
+    config_path: smol_str::SmolStr,
 
     /// The path to the plugins directory, relative to the directory
     /// of the executable.
@@ -28,7 +28,7 @@ struct Args {
         long,
         env = "TURBORUN_PLUGIN",
         default_value = "plugins")]
-    plugin_dir: String,
+    plugin_dir: smol_str::SmolStr,
 }
 
 fn main() -> eframe::Result {

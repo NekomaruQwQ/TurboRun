@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use egui::*;
+use smol_str::SmolStr;
 
 use crate::data::*;
 use super::*;
@@ -17,7 +18,7 @@ use super::*;
 pub fn task_editor_ui(
     ui: &mut Ui,
     view: &mut ViewContext,
-    plugins: &BTreeMap<String, PluginPack>,
+    plugins: &BTreeMap<SmolStr, PluginPack>,
     task: &mut Task,
     is_existing: bool) {
     ui.separator();
@@ -88,9 +89,18 @@ pub fn task_editor_ui(
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
             ui.label("Name");
-            ui.add(
-                TextEdit::singleline(&mut task.name)
-                    .desired_width(f32::INFINITY));
+            // Buffered edit: egui's `TextEdit` needs `&mut dyn TextBuffer`,
+            // which `SmolStr` does not implement. Bind the widget to a local
+            // `String` and write back on change — same pattern used below
+            // for plugin arg values.
+            let mut name_buf: String = task.name.to_string();
+            if ui.add(
+                TextEdit::singleline(&mut name_buf)
+                    .desired_width(f32::INFINITY))
+                .changed()
+            {
+                task.name = SmolStr::from(name_buf.as_str());
+            }
             ui.end_row();
 
             ui.label("Command");
@@ -203,7 +213,7 @@ pub fn task_editor_ui(
                         .show(ui, |ui| {
                             for arg in &plugin.args {
                                 ui.horizontal(|ui| {
-                                    let label_resp = ui.label(&arg.name);
+                                    let label_resp = ui.label(arg.name.as_str());
                                     if !arg.optional {
                                         ui.label(RichText::new("*").color(color::RED));
                                     }
@@ -213,12 +223,14 @@ pub fn task_editor_ui(
                                 });
 
                                 // Buffered edit: bind the widget to a local
-                                // string and only write back on change. This
-                                // avoids materializing empty entries into
-                                // `inst.args` for every optional arg the user
-                                // never touched, keeping the saved TOML clean.
+                                // `String` (TextEdit needs `&mut dyn TextBuffer`,
+                                // which `SmolStr` does not impl) and only write
+                                // back on change. This avoids materializing empty
+                                // entries into `inst.args` for every optional arg
+                                // the user never touched, keeping the saved TOML
+                                // clean.
                                 let mut value: String =
-                                    inst.args.get(&arg.name).cloned().unwrap_or_default();
+                                    inst.args.get(&arg.name).map(SmolStr::to_string).unwrap_or_default();
                                 let changed = match arg.accepted_values {
                                     None => {
                                         ui.add(
@@ -232,7 +244,7 @@ pub fn task_editor_ui(
                                             .selected_text(&value)
                                             .show_ui(ui, |ui| {
                                                 for choice in accepted {
-                                                    if ui.selectable_value(&mut value, choice.clone(), choice).changed() {
+                                                    if ui.selectable_value(&mut value, choice.to_string(), choice.as_str()).changed() {
                                                         changed = true;
                                                     }
                                                 }
@@ -244,7 +256,7 @@ pub fn task_editor_ui(
                                     if value.is_empty() {
                                         inst.args.remove(&arg.name);
                                     } else {
-                                        inst.args.insert(arg.name.clone(), value);
+                                        inst.args.insert(arg.name.clone(), SmolStr::from(value.as_str()));
                                     }
                                 }
                                 ui.end_row();
@@ -258,7 +270,7 @@ pub fn task_editor_ui(
                         for flag in &plugin.flags {
                             let was = inst.flags.contains(&flag.name);
                             let mut on = was;
-                            let resp = ui.checkbox(&mut on, &flag.name);
+                            let resp = ui.checkbox(&mut on, flag.name.as_str());
                             if let Some(desc) = flag.description.as_deref() {
                                 let _ = resp.on_hover_text(desc);
                             }

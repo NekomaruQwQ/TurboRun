@@ -9,6 +9,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Context as _;
+use smol_str::SmolStr;
 
 use crate::data::*;
 use crate::plugin::*;
@@ -92,7 +93,7 @@ impl TaskWorker {
         self.task = task;
     }
 
-    pub fn status(&self, plugins: &BTreeMap<String, PluginPack>) -> TaskStatus {
+    pub fn status(&self, plugins: &BTreeMap<SmolStr, PluginPack>) -> TaskStatus {
         if !self.is_valid(plugins) {
             TaskStatus::Invalid
         } else if self.is_running() {
@@ -108,7 +109,7 @@ impl TaskWorker {
         }
     }
 
-    fn is_valid(&self, plugins: &BTreeMap<String, PluginPack>) -> bool {
+    fn is_valid(&self, plugins: &BTreeMap<SmolStr, PluginPack>) -> bool {
         !self.task.name.trim().is_empty() &&
         !self.task.command.trim().is_empty() && {
             self.task
@@ -187,7 +188,7 @@ impl TaskWorker {
     }
 
     #[expect(clippy::panic_in_result_fn, reason = "precondition check")]
-    pub fn run(&mut self, plugin_dir: &Path, plugins: &BTreeMap<String, PluginPack>)
+    pub fn run(&mut self, plugin_dir: &Path, plugins: &BTreeMap<SmolStr, PluginPack>)
      -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");
@@ -213,9 +214,12 @@ impl TaskWorker {
 }
 
 struct TaskProcess {
-    name: String,
+    name: SmolStr,
     start_time: Instant,
     child: Child,
+    /// Process output stays as `Vec<String>` — lines from `BufReader::lines()`
+    /// are already allocated `String`s and typically exceed `SmolStr`'s
+    /// 23-byte inline threshold, so conversion would add cost for no win.
     stdout: Vec<String>,
     stderr: Vec<String>,
     stdout_reader: PipeReader,
@@ -227,7 +231,7 @@ impl TaskProcess {
         let stdout = child.stdout.take().expect("failed to take stdout");
         let stderr = child.stderr.take().expect("failed to take stderr");
         Self {
-            name: name.to_owned(),
+            name: name.into(),
             start_time: Instant::now(),
             child,
             stdout: Vec::new(),

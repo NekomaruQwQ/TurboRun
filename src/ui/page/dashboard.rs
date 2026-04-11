@@ -78,7 +78,7 @@ fn task_card_content(
         .add(
             item().grow(1.0),
             Button::new("")
-                .left_text(&task.name)
+                .left_text(task.name.as_str())
                 .right_text(task_status_label(status).small())
                 .truncate())
         .on_hover_cursor(CursorIcon::PointingHand)

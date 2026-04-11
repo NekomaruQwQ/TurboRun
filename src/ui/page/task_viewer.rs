@@ -67,7 +67,7 @@ fn task_main_card(
                     .align_self_content(Align2::LEFT_CENTER),
                 |ui| ui.horizontal(|ui| {
                     ui.add_space(6.0);
-                    ui.add(Label::new(RichText::new(&task.name).heading()).wrap());
+                    ui.add(Label::new(RichText::new(task.name.as_str()).heading()).wrap());
                 }));
             flex.add(item(), Label::new(task_status_label(status).small()));
             flex.add(item(), Label::new(""));
