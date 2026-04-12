@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::*;
 use std::fs;
 use std::path::Path;
 
@@ -11,7 +11,9 @@ use smol_str::SmolStr;
 
 use crate::data::*;
 
-pub fn scan_plugins(plugin_dir: &Path) -> anyhow::Result<impl Iterator<Item = PluginPack>> {
+#[expect(clippy::type_complexity, reason = "collections")]
+pub fn scan_plugins(plugin_dir: &Path)
+ -> anyhow::Result<impl Iterator<Item = PluginPack>> {
     log::info!("scanning plugins at \"{}\" ...", plugin_dir.display());
     fs::read_dir(plugin_dir)
         .with_context(|| format!("fs::read_dir failed: {}", plugin_dir.display()))?
@@ -67,45 +69,75 @@ fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
                 .tap_err(|err| log::error!("failed to load plugin #{index}: {err:?}"))
                 .ok()
         })
-        .map(|plugin| (plugin.name.clone(), plugin))
+        .sorted_by_key(|plugin| plugin.name.clone())
+        .collect_vec()
         .pipe(|plugins| PluginPack {
-            path: path.to_path_buf(),
             name: pack_name,
-            plugins: plugins.collect(),
+            path: path.into(),
+            plugins,
         })
         .pipe(Ok)
 }
 
-pub fn apply_plugins(
-    plugin_packs: &BTreeMap<SmolStr, PluginPack>,
-    source: &str,
-    plugins: &[PluginInstance])
+pub fn collect_plugins<'a, I>(packs: I) -> PluginMap
+ where
+    I: IntoIterator<Item = &'a PluginPack>, {
+    packs
+        .into_iter()
+        .flat_map(|pack| {
+            pack.plugins
+                .iter()
+                .map(|plugin| {
+                    ((
+                        pack.name.clone(),
+                        plugin.name.clone()),
+                        plugin.clone())
+                })
+        })
+        .collect()
+}
+
+pub fn apply_plugins(task: &Task, plugin_packs: &PluginPackMap)
  -> anyhow::Result<String> {
     let mut out = Vec::new();
-    for inst in plugins {
-        plugin_packs.get(&inst.pack)
-            .map(|pack| pack.path.clone())
-            .ok_or_else(|| anyhow::anyhow!("plugin pack \"{}\" not found", inst.pack))?
-            .pipe(|path| path.to_str().expect("@logicError invalid plugin_dir").to_owned())
-            .pipe(|path| path.replace('\\', "/"))
-            .pipe(|path| format!("use \"{path}\""))
-            .pipe(|line| out.push(line));
-    }
+
+    task.plugins
+        .iter()
+        .map(|item| item.pack.clone())
+        .filter_map(|pack_name| {
+            plugin_packs
+                .get(&pack_name)
+                .tap_none(|| {
+                    log::error!(
+                        "missing plugin pack {pack_name} for task \"{}\"",
+                        &task.name);
+                })
+        })
+        .map(|plugin| {
+            plugin.path
+                .to_str()
+                .expect("@logicError invalid plugin_dir")
+                .to_owned()
+        })
+        .map(|path| path.replace('\\', "/"))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .for_each(|path| out.push(format!("use \"{path}\"")));
 
     let mut i = 0;
-    out.push(["let __closure_0 = { ", source, " }"].join(""));
+    out.push(["let __closure_0 = { ", &task.command, " }"].join(""));
     i += 1;
 
-    for inst in plugins {
+    for item in &task.plugins {
         let mut line = format!(
             "{} {} $__closure_{}",
-            inst.pack,
-            inst.name,
+            item.pack,
+            item.name,
             i - 1);
-        for (key, value) in &inst.args {
+        for (key, value) in &item.args {
             line.push_str(&format!(" --{} \"{}\"", key, value));
         }
-        for flag in &inst.flags {
+        for flag in &item.flags {
             line.push_str(&format!(" --{flag}"));
         }
         out.push(format!("let __closure_{i} = {{ {line} }}"));

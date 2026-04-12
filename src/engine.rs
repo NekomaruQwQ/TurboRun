@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::*;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -15,8 +14,9 @@ use crate::plugin::*;
 use crate::worker::*;
 
 pub struct TaskEngine {
-    plugin_packs: BTreeMap<SmolStr, PluginPack>,
     tasks: HashMap<TaskId, TaskWorker>,
+    plugin_packs: PluginPackMap,
+    plugins: PluginMap,
 
     config_path: PathBuf,
     plugin_dir: PathBuf,
@@ -25,8 +25,9 @@ pub struct TaskEngine {
 impl TaskEngine {
     pub fn new(config_path: &Path, plugin_dir: &Path) -> Self {
         let mut engine = Self {
-            plugin_packs: BTreeMap::new(),
             tasks: HashMap::new(),
+            plugin_packs: BTreeMap::new(),
+            plugins: BTreeMap::new(),
             config_path: config_path.to_owned(),
             plugin_dir: plugin_dir.to_owned(),
         };
@@ -62,7 +63,11 @@ impl TaskEngine {
         &self.plugin_dir
     }
 
-    pub const fn plugin_packs(&self) -> &BTreeMap<SmolStr, PluginPack> {
+    pub const fn plugins(&self) -> &PluginMap {
+        &self.plugins
+    }
+
+    pub const fn plugin_packs(&self) -> &PluginPackMap {
         &self.plugin_packs
     }
 
@@ -76,7 +81,7 @@ impl TaskEngine {
         self.tasks
             .get(&task_id)
             .expect("invalid task_id")
-            .status(&self.plugin_packs)
+            .status(&self.plugins)
     }
 
     pub fn empty_task(&self) -> Task {
@@ -95,7 +100,7 @@ impl TaskEngine {
             command: String::from("print \"Hello, TurboRun!\""),
             plugins: vec![
                 PluginInstance {
-                    pack: SmolStr::new_static("base.nu"),
+                    pack: SmolStr::new_static("base"),
                     name: SmolStr::new_static("time"),
                     enabled: true,
                     args: [("unit".into(), "s".into())].into(),
@@ -175,6 +180,8 @@ impl TaskEngine {
             scan_plugins(&self.plugin_dir)?
                 .map(|pack| (pack.name.clone(), pack))
                 .collect();
+        self.plugins =
+            collect_plugins(self.plugin_packs.values());
         Ok(())
     }
 
@@ -199,7 +206,7 @@ impl TaskEngine {
         self.tasks
             .get_mut(&task_id)
             .expect("task_id must be valid")
-            .run(&self.plugin_packs)
+            .run(&self.plugin_packs, &self.plugins)
     }
 
     /// Stops the given task if it is running.

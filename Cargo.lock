@@ -2274,6 +2274,9 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "smithay-client-toolkit"
@@ -2537,6 +2540,7 @@ dependencies = [
  "nerd-font-symbols",
  "pretty_env_logger",
  "serde",
+ "smallvec",
  "smol_str 0.3.6",
  "tap",
  "toml",

@@ -1,10 +1,14 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use egui::*;
 use smol_str::SmolStr;
 
-use crate::data::*;
+use crate::data::{self, *};
 use super::*;
+
+// Explicit import to disambiguate from `egui::Plugin`.
+use data::Plugin;
 
 /// Renders the task editor page for `editor` and reports the user's intent
 /// for this frame via `page`. The caller is responsible for performing any
@@ -18,7 +22,8 @@ use super::*;
 pub fn task_editor_ui(
     ui: &mut Ui,
     view: &mut ViewContext,
-    plugins: &BTreeMap<SmolStr, PluginPack>,
+    plugin_packs: &PluginPackMap,
+    plugins: &PluginMap,
     task: &mut Task,
     is_existing: bool) {
     ui.separator();
@@ -113,7 +118,13 @@ pub fn task_editor_ui(
             // added rows start from — picked over "first available plugin"
             // because it's the one that does nothing if the user doesn't
             // bother to swap it.
-            task.plugins.push(PluginInstance::new("base.nu", "noop"));
+            task.plugins.push(PluginInstance {
+                pack: SmolStr::new_static("base"),
+                name: SmolStr::new_static("noop"),
+                enabled: false,
+                args: BTreeMap::new(),
+                flags: Vec::new(),
+            });
         }
     });
 
@@ -136,10 +147,7 @@ pub fn task_editor_ui(
                     ui.label(nf::fa::FA_PUZZLE_PIECE);
 
                     let known_before =
-                        plugins
-                            .get(&inst.pack)
-                            .and_then(|pack| pack.plugins.get(&inst.name))
-                            .is_some();
+                        plugins.contains_key(&inst.plugin());
                     let selected_text = if known_before {
                         RichText::new(format!("{} / {}", inst.pack, inst.name))
                     } else {
@@ -150,15 +158,17 @@ pub fn task_editor_ui(
                     ComboBox::from_id_salt("plugin_select")
                         .selected_text(selected_text)
                         .show_ui(ui, |ui| {
-                            for (pack_name, pack) in plugins {
-                                for (plugin_name, plugin) in &pack.plugins {
+                            for (pack_name, pack) in plugin_packs.iter() {
+                                ui.label(RichText::new(pack_name.as_str()).strong().small());
+                                ui.separator();
+                                for plugin in &pack.plugins {
                                     let selected =
-                                        inst.pack == *pack_name &&
-                                        inst.name == *plugin_name;
-                                    let label = format!("{pack_name} / {plugin_name}");
+                                        inst.pack == **pack_name &&
+                                        inst.name == plugin.name;
+                                    let label = format!("{} / {}", pack_name, plugin.name);
                                     if ui.selectable_label(selected, label).clicked() && !selected {
-                                        inst.pack.clone_from(pack_name);
-                                        inst.name.clone_from(plugin_name);
+                                        inst.pack = pack_name.clone();
+                                        inst.name = plugin.name.clone();
                                         // Drop any args/flags that the new plugin no longer
                                         // declares — silently keeping them would leak orphan
                                         // entries into the saved config. Args/flags whose names
@@ -188,11 +198,7 @@ pub fn task_editor_ui(
                 // changing the selection takes effect this frame and we
                 // don't render args/flags that the just-pruned `inst` no
                 // longer carries.
-                let Some(plugin) =
-                    plugins
-                        .get(&inst.pack)
-                        .and_then(|pack| pack.plugins.get(&inst.name))
-                else {
+                let Some(plugin) = plugins.get(&inst.plugin()) else {
                     return;
                 };
 

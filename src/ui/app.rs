@@ -61,6 +61,7 @@ pub fn app_ui(ui: &mut egui::Ui, page: &mut Page, engine: &TaskEngine)
                             ui,
                             &mut view,
                             engine.plugin_packs(),
+                            engine.plugins(),
                             task,
                             engine.task(task.id).is_some()),
                 }));

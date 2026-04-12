@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io;
+use std::path::PathBuf;
 use std::process::*;
 use std::sync::mpsc;
 use std::thread;
@@ -93,7 +94,7 @@ impl TaskWorker {
         self.task = task;
     }
 
-    pub fn status(&self, plugins: &BTreeMap<SmolStr, PluginPack>) -> TaskStatus {
+    pub fn status(&self, plugins: &PluginMap) -> TaskStatus {
         if !self.is_valid(plugins) {
             TaskStatus::Invalid
         } else if self.is_running() {
@@ -109,7 +110,7 @@ impl TaskWorker {
         }
     }
 
-    fn is_valid(&self, plugins: &BTreeMap<SmolStr, PluginPack>) -> bool {
+    fn is_valid(&self, plugins: &PluginMap) -> bool {
         // Delegates to the `garde::Validate` impl on `Task`. The structured
         // report is discarded here because callers only need a yes/no signal;
         // the editor UI calls `Task::validate_with` directly to surface
@@ -162,16 +163,15 @@ impl TaskWorker {
     }
 
     #[expect(clippy::panic_in_result_fn, reason = "precondition check")]
-    pub fn run(&mut self, plugins: &BTreeMap<SmolStr, PluginPack>)
+    pub fn run(
+        &mut self,
+        plugin_packs: &PluginPackMap,
+        plugins: &PluginMap)
      -> anyhow::Result<()> {
         assert!(!self.is_running(), "cannot run task while it's already running");
         assert!(self.is_valid(plugins), "cannot run invalid task");
 
-        let script =
-            apply_plugins(
-                plugins,
-                &self.task.command,
-                &self.task.plugins)?;
+        let script = apply_plugins(&self.task, plugin_packs)?;
         log::info!("running task \"{}\" with script: >>>\n{script}\n<<<", self.task.name);
         let child =
             Command::new("nu")
