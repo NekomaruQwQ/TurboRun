@@ -1,68 +1,21 @@
 use std::collections::*;
 use std::fs;
 use std::path::Path;
-use std::path::PathBuf;
 
-use anyhow::Context as _;
-use itertools::Itertools as _;
-use smol_str::SmolStr;
-use tap::prelude::*;
-
+use crate::prelude::*;
 use crate::util::*;
 use crate::data::*;
 use crate::plugin::*;
 use crate::worker::*;
 
+#[derive(Default)]
 pub struct TaskEngine {
     tasks: HashMap<TaskId, TaskWorker>,
     plugin_packs: PluginPackMap,
     plugins: PluginMap,
-
-    config_path: PathBuf,
-    plugin_dir: PathBuf,
 }
 
 impl TaskEngine {
-    pub fn new(config_path: &Path, plugin_dir: &Path) -> Self {
-        let mut engine = Self {
-            tasks: HashMap::new(),
-            plugin_packs: BTreeMap::new(),
-            plugins: BTreeMap::new(),
-            config_path: config_path.to_owned(),
-            plugin_dir: plugin_dir.to_owned(),
-        };
-
-
-        // Failure to load the config is a fatal error and continuing may cause data
-        // loss, so we panic instead of just logging the error.
-        if let Err(err) = engine.load_config() {
-            panic!("failed to load config at {}: {err:?}", config_path.display());
-        }
-
-        // Failure to scan plugins is not a fatal error: tasks that depend on missing
-        // plugins will simply be invalid and won't run, but the user can still edit
-        // the config and fix the problem. So we just log the error and continue.
-        if let Err(err) = engine.scan_plugins() {
-            log::error!("failed to scan plugins in {}: {err:?}", plugin_dir.display());
-        }
-
-        engine
-    }
-}
-
-#[allow(
-    dead_code,
-    clippy::allow_attributes,
-    reason = "accessor methods may be needed in the future")]
-impl TaskEngine {
-    pub const fn config_path(&self) -> &PathBuf {
-        &self.config_path
-    }
-
-    pub const fn plugin_dir(&self) -> &PathBuf {
-        &self.plugin_dir
-    }
-
     pub const fn plugins(&self) -> &PluginMap {
         &self.plugins
     }
@@ -114,13 +67,6 @@ impl TaskEngine {
         self.tasks.insert(task.id, TaskWorker::new(task));
     }
 
-    pub fn update_task(&mut self, task: Task) {
-        self.tasks
-            .get_mut(&task.id)
-            .expect("task must already exist to be updated")
-            .set_task(task);
-    }
-
     pub fn update_or_insert_task(&mut self, task: Task) {
         if let Some(worker) = self.tasks.get_mut(&task.id) {
             worker.set_task(task);
@@ -135,13 +81,13 @@ impl TaskEngine {
 }
 
 impl TaskEngine {
-    pub fn load_config(&mut self) -> anyhow::Result<()> {
+    pub fn load_config(&mut self, config_path: &Path) -> anyhow::Result<()> {
         if self.tasks.values().any(TaskWorker::is_running) {
             anyhow::bail!("cannot load config while tasks are running");
         }
 
         let config =
-            std::fs::read_to_string(&self.config_path)
+            std::fs::read_to_string(config_path)
                 .pipe(none_if_not_found)
                 .context("fs::read_to_string failed")?
                 .map(|toml| toml::from_str::<Config>(&toml))
@@ -158,7 +104,7 @@ impl TaskEngine {
         Ok(())
     }
 
-    pub fn save_config(&self) -> anyhow::Result<()> {
+    pub fn save_config(&self, config_path: &Path) -> anyhow::Result<()> {
         let tasks =
             self.tasks
                 .values()
@@ -170,19 +116,37 @@ impl TaskEngine {
 
         toml::to_string_pretty(&config)
             .context("toml::to_string_pretty failed")?
-            .pipe(|toml| fs::write(&self.config_path, &toml))
+            .pipe(|toml| fs::write(config_path, &toml))
             .context("fs::write failed")?;
         Ok(())
     }
 
-    pub fn scan_plugins(&mut self) -> anyhow::Result<()> {
+    pub fn load_plugin_packs<'a, I>(&mut self, paths: I)
+    where
+        I: IntoIterator<Item = &'a Path> {
         self.plugin_packs =
-            scan_plugins(&self.plugin_dir)?
+            paths
+                .into_iter()
+                .filter_map(|path| {
+                    load_plugin_pack_from_file(path)
+                        .tap_err(|err| log::error!("failed to load plugin pack \"{}\": {err:?}", path.display()))
+                        .ok()
+                })
                 .map(|pack| (pack.name.clone(), pack))
                 .collect();
         self.plugins =
-            collect_plugins(self.plugin_packs.values());
-        Ok(())
+            self.plugin_packs
+                .values()
+                .flat_map(|plugin_pack| {
+                    plugin_pack
+                        .plugins
+                        .iter()
+                        .map(|plugin| ((
+                            plugin_pack.name.clone(),
+                            plugin.name.clone()),
+                            plugin.clone()))
+                })
+                .collect();
     }
 
     /// Returns the worker for a task by ID.

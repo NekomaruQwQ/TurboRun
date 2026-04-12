@@ -1,6 +1,6 @@
 set shell := ["nu", "-c"]
 
 run:
-    TURBORUN_CONFIG=target/TurboRun.toml \
-    TURBORUN_PLUGIN=plugins \
-    cargo run
+    ^cargo run -- \
+        --config "target/TurboRun.yaml" \
+        --plugin-pack "plugins/base.nu"

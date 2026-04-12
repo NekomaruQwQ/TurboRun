@@ -1,34 +1,12 @@
-use std::collections::*;
 use std::fs;
 use std::path::Path;
 
-use tap::prelude::*;
-
-use anyhow::Context as _;
-use itertools::Itertools as _;
 use serde::Deserialize as _;
-use smol_str::SmolStr;
 
+use crate::prelude::*;
 use crate::data::*;
 
-#[expect(clippy::type_complexity, reason = "collections")]
-pub fn scan_plugins(plugin_dir: &Path)
- -> anyhow::Result<impl Iterator<Item = PluginPack>> {
-    log::info!("scanning plugins at \"{}\" ...", plugin_dir.display());
-    fs::read_dir(plugin_dir)
-        .with_context(|| format!("fs::read_dir failed: {}", plugin_dir.display()))?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter_map(|path| {
-            load_plugin_pack_from_file(&path)
-                .tap_err(|err| log::error!("failed to load plugin pack at \"{}\": {err:?}", path.display()))
-                .ok()?
-                .pipe(Some)
-        })
-        .pipe(Ok)
-}
-
-fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
+pub fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
     use toml::Value as TomlValue;
     use toml::Table as TomlTable;
 
@@ -79,73 +57,52 @@ fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
         .pipe(Ok)
 }
 
-pub fn collect_plugins<'a, I>(packs: I) -> PluginMap
- where
-    I: IntoIterator<Item = &'a PluginPack>, {
-    packs
-        .into_iter()
-        .flat_map(|pack| {
-            pack.plugins
-                .iter()
-                .map(|plugin| {
-                    ((
-                        pack.name.clone(),
-                        plugin.name.clone()),
-                        plugin.clone())
-                })
-        })
-        .collect()
-}
-
 pub fn apply_plugins(task: &Task, plugin_packs: &PluginPackMap)
  -> anyhow::Result<String> {
     let mut out = Vec::new();
 
+    // 1. Import plugin pack files.
     task.plugins
         .iter()
-        .map(|item| item.pack.clone())
-        .filter_map(|pack_name| {
+        .map(|item| {
             plugin_packs
-                .get(&pack_name)
-                .tap_none(|| {
-                    log::error!(
-                        "missing plugin pack {pack_name} for task \"{}\"",
-                        &task.name);
-                })
+                .get(&item.pack)
+                .ok_or_else(|| anyhow::anyhow!("missing plugin pack {}", item.pack))
         })
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .into_iter()
         .map(|plugin| {
             plugin.path
                 .to_str()
                 .expect("@logicError invalid plugin_dir")
-                .to_owned()
+                .replace('\\', "/")
         })
-        .map(|path| path.replace('\\', "/"))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .for_each(|path| out.push(format!("use \"{path}\"")));
+        .unique()
+        .map(|path| format!("use \"{path}\""))
+        .pipe(|lines| out.extend(lines));
 
-    let mut i = 0;
+    // 2. Build the closure chain for the task command and plugins.
     out.push(["let __closure_0 = { ", &task.command, " }"].join(""));
-    i += 1;
 
+    let mut curr = 1;
+    let mut prev = 0;
+    #[expect(clippy::explicit_counter_loop, reason = "more readable with explicit counters")]
     for item in &task.plugins {
-        let mut line = format!(
-            "{} {} $__closure_{}",
-            item.pack,
-            item.name,
-            i - 1);
-        for (key, value) in &item.args {
-            line.push_str(&format!(" --{} \"{}\"", key, value));
-        }
-        for flag in &item.flags {
-            line.push_str(&format!(" --{flag}"));
-        }
-        out.push(format!("let __closure_{i} = {{ {line} }}"));
-        i += 1;
+        format!("{} {} $__closure_{prev}", item.pack, item.name)
+            .pipe(Some)
+            .into_iter()
+            .chain(item.args.iter().map(|(key, value)| format!("--{key} \"{value}\"")))
+            .chain(item.flags.iter().map(|flag| format!("--{flag}")))
+            .join(" ")
+            .pipe(|line| format!("let __closure_{curr} = {{ {line} }}"))
+            .pipe(|line| out.push(line));
+        prev = curr;
+        curr += 1;
     }
 
-    out.push(format!("do $__closure_{}", i - 1));
+    // 3. Append the final command to run the last closure.
     out
+        .tap_mut(|out| out.push(format!("do $__closure_{prev}")))
         .join("\n")
         .tap(|result| log::info!(">>>\n{result}\n<<<"))
         .pipe(Ok)

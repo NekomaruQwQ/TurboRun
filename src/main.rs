@@ -10,25 +10,24 @@ mod engine;
 mod ui;
 mod app;
 
+mod prelude {
+    pub use anyhow::Context;
+    pub use itertools::Itertools;
+    pub use smol_str::SmolStr;
+    pub use tap::prelude::*;
+}
+
 #[derive(clap::Parser)]
 struct Args {
     /// The path to the TurboRun configuration file (TurboRun.toml),
     /// relative to the directory of the executable.
-    #[arg(
-        short,
-        long,
-        env = "TURBORUN_CONFIG",
-        default_value = "TurboRun.toml")]
-    config_path: smol_str::SmolStr,
+    #[arg(short, long)]
+    config: smol_str::SmolStr,
 
     /// The path to the plugins directory, relative to the directory
     /// of the executable.
-    #[arg(
-        short,
-        long,
-        env = "TURBORUN_PLUGIN",
-        default_value = "plugins")]
-    plugin_dir: smol_str::SmolStr,
+    #[arg(short, long)]
+    plugin_pack: Vec<smol_str::SmolStr>,
 }
 
 fn main() -> eframe::Result {

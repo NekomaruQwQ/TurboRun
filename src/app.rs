@@ -1,12 +1,14 @@
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::engine::TaskEngine;
 use crate::ui;
+use crate::Args;
 
 pub struct App {
     engine: TaskEngine,
     page: ui::Page,
+    args: Args,
 }
 
 impl eframe::App for App {
@@ -29,25 +31,36 @@ impl App {
         use clap::Parser as _;
         use crate::*;
         let args = Args::parse();
-        let config_path = PathBuf::from(args.config_path.as_str());
-        let plugin_dir = PathBuf::from(args.plugin_dir.as_str());
-        let engine = TaskEngine::new(&config_path, &plugin_dir);
+        log::info!("starting with config: {}, plugin packs: {:?}",
+            args.config,
+            args.plugin_pack);
+
+        let mut engine = TaskEngine::default();
+
+        // Failure to load the config is a fatal error and continuing may cause data
+        // loss, so we panic instead of just logging the error.
+        engine
+            .load_config(Path::new(&args.config))
+            .expect("failed to load config file");
+
+        // Failure to scan plugins is not a fatal error: tasks that depend on missing
+        // plugins will simply be invalid and won't run, but the user can still edit
+        // the config and fix the problem. So we just log the error and continue.
+        engine
+            .load_plugin_packs(
+                args.plugin_pack.iter().map(Path::new));
         Self {
             engine,
             page: ui::Page::Dashboard,
+            args,
         }
     }
 
     fn on_action(&mut self, action: ui::Action) {
         match action {
             ui::Action::RefreshPlugins => {
-                self.engine
-                    .scan_plugins()
-                    .unwrap_or_else(|err| {
-                        log::error!(
-                            "failed to scan plugins in {}: {err:?}",
-                            self.engine.plugin_dir().display());
-                    });
+                self.engine.load_plugin_packs(
+                    self.args.plugin_pack.iter().map(Path::new));
             },
             ui::Action::RunTask(id) => {
                 if let Err(err) = self.engine.run_task(id) {
@@ -59,7 +72,7 @@ impl App {
             },
             ui::Action::SaveTask(task) => {
                 self.engine.update_or_insert_task(task);
-                if let Err(err) = self.engine.save_config() {
+                if let Err(err) = self.engine.save_config(Path::new(&self.args.config)) {
                     log::error!("save_config failed: {err:?}");
                 }
             },
@@ -69,7 +82,7 @@ impl App {
                         log::error!("refusing to delete running task {id}");
                     } else {
                         self.engine.remove_task(id);
-                        if let Err(err) = self.engine.save_config() {
+                        if let Err(err) = self.engine.save_config(Path::new(&self.args.config)) {
                             log::error!("save_config failed: {err:?}");
                         }
                     }
