@@ -1,16 +1,29 @@
 pub use app::app_ui;
 pub use style::setup_style;
 
+mod prelude {
+    pub use tap::prelude::*;
+
+    pub use egui::*;
+    pub use egui_flex::*;
+
+    pub use crate::data::*;
+    pub use crate::engine::*;
+
+    pub use super::*;
+    pub use super::widget::*;
+}
+
 mod color;
 mod style;
 mod widget;
-mod common;
+mod custom;
 
 mod app;
 mod nav;
 
 mod page {
-    use super::*;
+    use super::prelude;
 
     mod dashboard;
     mod plugin;
@@ -23,8 +36,8 @@ mod page {
     pub use task_editor::task_editor_ui;
 }
 
-use crate::data::*;
-use crate::engine::TaskEngine;
+use crate::data::Task;
+use crate::data::TaskId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Page {

@@ -1,13 +1,4 @@
-use egui::*;
-use egui_flex::*;
-
-use super::color;
-use crate::engine::TaskEngine;
-use crate::engine::TaskStatus;
-
-use super::*;
-use super::widget::*;
-use super::common::task_status_label;
+use super::prelude::*;
 
 pub fn dashboard_ui(
     flex: &mut FlexInstance,
@@ -52,7 +43,7 @@ fn task_card(
             item().grow(1.0),
             Button::new("")
                 .left_text(task.name.as_str())
-                .right_text(task_status_label(status).small())
+                .right_text(custom::task_status_label(status).small())
                 .truncate())
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()

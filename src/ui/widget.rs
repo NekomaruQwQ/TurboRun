@@ -1,34 +1,8 @@
 use tap::prelude::*;
+use derive_setters::Setters;
 
 use egui::*;
 use egui_flex::*;
-use derive_setters::Setters;
-
-pub struct FlexSpace(pub f32);
-
-impl FlexSpace {
-    pub fn fill(flex: &mut FlexInstance) {
-        flex.add(item().grow(1.0), Self(0.0));
-    }
-}
-
-impl FlexWidget for FlexSpace {
-    type Response = ();
-
-    fn flex_ui(self, item: FlexItem, flex_instance: &mut FlexInstance) -> Self::Response {
-        flex_instance
-            .pipe(|flex| (flex.ui(), flex.is_vertical()))
-            .pipe(|(ui, is_vertical)| {
-                if is_vertical {
-                    Vec2::new(ui.available_width(), self.0)
-                } else {
-                    Vec2::new(self.0, ui.available_height())
-                }
-            })
-            .pipe(|size| move |ui: &mut Ui| ui.allocate_space(size))
-            .pipe(|body| flex_instance.add_ui(item, body));
-    }
-}
 
 pub struct FlexSeparator;
 

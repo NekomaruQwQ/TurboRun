@@ -4,7 +4,7 @@ use crate::engine::TaskStatus;
 use super::color;
 
 pub fn code_block(source: &str) -> RichText {
-    RichText::new(source.trim_end())
+    RichText::new(source.trim_ascii_end())
         .monospace()
         .line_height(Some(15.0))
 }

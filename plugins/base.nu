@@ -7,8 +7,13 @@ export def noop [command: closure]: nothing -> nothing {
 
 #? [[plugins]]
 #? name = "env"
-#? args = [{ name = "key" }, { name = "value" }]
 #? description = "Runs the command with an environment variable"
+#?
+#? [[plugins.args]]
+#? name = "key"
+#?
+#? [[plugins.args]]
+#? name = "value"
 export def env [command: closure, --key: string, --value: string]: nothing -> nothing {
     {} | insert $key $value | with-env $in $command
 }
@@ -31,8 +36,11 @@ export def repeat [command: closure, --interval: string = "1000"]: nothing -> no
 
 #? [[plugins]]
 #? name = "time"
-#? args = [{ name = "unit", optional = true }]
 #? description = "Measures the execution time of a command and prints it to stderr."
+#?
+#? [[plugins.args]]
+#? name = "unit"
+#? optional = true
 export def time [command: closure, --unit: string = "ms"]: nothing -> nothing {
     let start = date now
     do $command

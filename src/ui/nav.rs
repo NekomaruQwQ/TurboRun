@@ -1,9 +1,4 @@
-use tap::prelude::*;
-use egui::*;
-use egui_flex::*;
-
-use super::*;
-use super::widget::*;
+use super::prelude::*;
 
 pub fn nav_ui(
     flex: &mut FlexInstance,

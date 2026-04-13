@@ -1,13 +1,4 @@
-use egui::*;
-use egui_flex::*;
-use serde::de::value;
-
-use crate::data::*;
-use crate::engine::*;
-
-use super::*;
-use super::widget::*;
-use super::common::*;
+use super::prelude::*;
 
 pub fn task_viewer_ui(
     flex: &mut FlexInstance,
@@ -29,7 +20,7 @@ pub fn task_viewer_ui(
     FlexCard::vertical()
         .show(flex, |flex| {
             flex.add(item(), Label::new("Command"));
-            flex.add(item(), Label::new(code_block(&task.command)));
+            flex.add(item(), Label::new(custom::code_block(&task.command)));
         });
 
     // — Plugins card (readonly) —
@@ -58,7 +49,7 @@ fn task_main_card(
             ui.add_space(6.0);
             ui.add(Label::new(RichText::new(task.name.as_str()).heading()).wrap());
         }));
-    flex.add(item(), Label::new(task_status_label(status).small()));
+    flex.add(item(), Label::new(custom::task_status_label(status).small()));
     flex.add(item(), Label::new(""));
     flex.add_ui(item(), |ui| {
             ui.add_enabled(
@@ -131,9 +122,9 @@ fn task_output_card(
     // Here `Flex::add_ui` is needed to wrap the code block.
     flex.add_ui(item(), |ui| {
         if !lines.is_empty() {
-            ui.label(code_block(&lines.join("\n")));
+            ui.label(custom::code_block(&lines.join("\n")));
         } else {
-            ui.label(code_block("(no output)").weak());
+            ui.label(custom::code_block("(no output)").weak());
         }
     });
 }

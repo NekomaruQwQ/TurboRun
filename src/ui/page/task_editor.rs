@@ -1,14 +1,7 @@
 use std::collections::BTreeMap;
-use std::collections::HashMap;
-
-use egui::*;
 use smol_str::SmolStr;
 
-use crate::data::{self, *};
-use super::*;
-
-// Explicit import to disambiguate from `egui::Plugin`.
-use data::Plugin;
+use super::prelude::*;
 
 /// Renders the task editor page for `editor` and reports the user's intent
 /// for this frame via `page`. The caller is responsible for performing any
