@@ -52,9 +52,13 @@ fn main() -> eframe::Result {
             use crate::ui::setup_style;
 
             egui.set_zoom_factor(1.25);
-            egui.global_style_mut(|style| style.debug.warn_if_rect_changes_id = false);
             setup_fonts(egui);
             setup_style(egui);
+
+            #[cfg(debug_assertions)]
+            egui.global_style_mut(|style| {
+                style.debug.warn_if_rect_changes_id = false;
+            });
 
             Ok(Box::new(App::new()))
         }))
