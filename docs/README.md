@@ -107,7 +107,7 @@ dedicated threads are simpler and equally correct at this scale, and
 and waker system would serve no purpose. The `Send + 'static` constraints tokio
 pushes onto everything would be unnecessary friction.
 
-The runtime is `std::thread` + `crossbeam::channel`. Nothing more.
+The runtime is `std::thread` + `std::sync::mpsc`. Nothing more.
 
 ## Task Model
 
@@ -127,15 +127,19 @@ Behavioral differences live in the nu plugins that wrap the command.
 
 A task definition is minimal:
 
+- **id** — a randomly generated stable identifier (hex-serialized `u32`) that
+  persists across renames and other changes to the task
 - **name** — display name
 - **command** — the nu command to run, passed as a closure to the innermost plugin
-- **plugins** — ordered list of plugin instances `(file_name, item_name, args, flags)`
-  to compose around the command
+- **plugins** — ordered list of plugin instances `(pack, name, enabled, args, flags)`
+  to compose around the command, where `pack` is the Nushell module name derived
+  from the plugin file's stem, and `enabled` allows toggling a plugin without
+  removing it from the list
 
 No `auto_restart`. No `interval`. No `env_vars`. No `pre_command`. No `shell`.
-No `working_directory`. No `enabled`. These are all plugin concerns or future
-additions, not engine concerns. The task struct does not accumulate optional
-feature flags because the plugin system makes them unnecessary.
+No `working_directory`. These are all plugin concerns or future additions, not
+engine concerns. The task struct does not accumulate optional feature flags
+because the plugin system makes them unnecessary.
 
 ## Plugin System
 
@@ -180,8 +184,8 @@ annotations are inert comment lines in a normal Nu session.
 ### Multiple plugins per file
 
 A single `.nu` file can export multiple plugin commands. The built-in `base.nu` ships
-`noop` and `time`. A `PluginInstance` references a specific `(file_name, item_name)` pair,
-so multiple plugins from the same file can appear in one task's plugin list.
+`noop` and `time`. A `PluginInstance` references a specific `(pack, name)` pair, so multiple
+plugins from the same file can appear in one task's plugin list.
 
 ### Composition via closure chain
 
@@ -199,45 +203,53 @@ The first plugin in the list is innermost (wraps the command directly); the last
 outermost (the final `do` call). Nu evaluates this as a normal closure chain — no Rust
 string manipulation, no hidden eval.
 
-### Example plugins
+### Built-in plugins
 
-**retry.nu** — periodic retry on failure:
+The built-in `base.nu` ships `noop`, `env`, `repeat`, and `time`. Two examples:
+
+**repeat** — loop with interval:
 ```nu
 #? [[plugins]]
-#? name = "retry"
-#? description = "Retries the command on failure after a configurable interval."
-
+#? name = "repeat"
+#? description = "Repeats the command after an interval."
+#?
 #? [[plugins.args]]
 #? name = "interval"
 #? optional = true
+#? description = "Interval in milliseconds between each execution of the command. Default is 1000ms."
 
-export def retry [command: closure, --interval: duration = 5sec]: nothing -> nothing {
+export def repeat [command: closure, --interval: string = "1000"]: nothing -> nothing {
+    let interval = $"($interval)ms" | into duration
     loop {
-        try { do $command }
+        do $command
         sleep $interval
     }
 }
 ```
 
-**env.nu** — inject environment variables:
+**env** — inject an environment variable:
 ```nu
 #? [[plugins]]
-#? name = "with-env"
-#? description = "Runs the command with additional environment variables."
-
+#? name = "env"
+#? description = "Runs the command with an environment variable"
+#?
 #? [[plugins.args]]
-#? name = "vars"
+#? name = "key"
+#?
+#? [[plugins.args]]
+#? name = "value"
 
-export def "with-env" [command: closure, --vars: record]: nothing -> nothing {
-    with-env $vars { do $command }
+export def env [command: closure, --key: string, --value: string]: nothing -> nothing {
+    {} | insert $key $value | with-env $in $command
 }
 ```
 
 ### Preview, not magic
 
-TurboRun always shows the fully composed Nu script before execution. A preview
-panel displays the final generated code. No hidden transforms — if the user can
-read it, they can debug it. This is non-negotiable.
+The fully composed Nu script must always be inspectable — no hidden transforms.
+If the user can read the generated code, they can debug it. This is
+non-negotiable. Currently the composed script is logged at `info` level before
+execution; a dedicated preview panel in the UI is planned.
 
 ### No in-app editor
 
@@ -250,13 +262,15 @@ would be a losing battle that distracts from the core product.
 
 ```
 my-workspace/
-  turborun.json        # task definitions
+  TurboRun.toml        # task definitions
   plugins/
-    retry.nu           # loop with interval
-    env.nu             # environment wrapper
-    healthcheck.nu     # probe after launch
-    notify-on-fail.nu  # desktop notification on exit
+    base.nu            # built-in plugins (noop, env, repeat, time)
+    custom.nu          # your own plugins
 ```
+
+TurboRun is launched with CLI arguments that point to the config and plugin
+packs: `turborun --config TurboRun.toml --plugin-pack plugins/base.nu`. Paths
+are relative to the executable's directory.
 
 Version-controllable. Shareable. Composable. The `.nu` files are just files —
 edit them anywhere, test them in a terminal independently, commit them alongside
@@ -368,8 +382,12 @@ generation speed at this scale.
 
 - **Language:** Rust (2024 edition)
 - **UI:** egui / eframe
-- **Concurrency:** `std::thread` + `crossbeam::channel`
-- **Serialization:** serde + serde_json
+- **Concurrency:** `std::thread` + `std::sync::mpsc`
+- **Serialization:** serde + toml
 - **Process management:** `std::process::Command`
-- **Windows integration:** `windows` crate (Job Objects)
+- **Windows integration:** `win32job` crate (Job Objects)
+- **CLI:** clap
+- **Error handling:** anyhow
+- **Validation:** garde
+- **Layout:** egui_flex
 - **Extension runtime:** Nushell
