@@ -62,12 +62,8 @@ pub fn nav_ui(
                 .w_full()
                 .gap([4.0, 4.0].into())
                 .show(ui, |flex| {
-                    for worker in engine.tasks_sorted() {
-                        nav_task_ui(
-                            flex,
-                            view,
-                            page,
-                            worker.task());
+                    for (task, _) in engine.task_view() {
+                        nav_task_ui(flex, view, page, task);
                     }
                 });
         });

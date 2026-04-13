@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::engine::TaskEngine;
+use crate::engine::*;
 use crate::ui;
 use crate::Args;
 
@@ -77,8 +77,8 @@ impl App {
                 }
             },
             ui::Action::DeleteTask(id) => {
-                if let Some(worker) = self.engine.task(id) {
-                    if worker.is_running() {
+                if self.engine.task(id).is_some() {
+                    if self.engine.task_status(id) == TaskStatus::Running {
                         log::error!("refusing to delete running task {id}");
                     } else {
                         self.engine.remove_task(id);

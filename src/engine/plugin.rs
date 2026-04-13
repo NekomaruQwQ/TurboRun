@@ -6,7 +6,37 @@ use serde::Deserialize as _;
 use crate::prelude::*;
 use crate::data::*;
 
-pub fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
+impl super::TaskEngine {
+    pub fn load_plugin_packs<'a, I>(&mut self, paths: I)
+    where
+        I: IntoIterator<Item = &'a Path> {
+        self.plugin_packs =
+            paths
+                .into_iter()
+                .filter_map(|path| {
+                    load_plugin_pack_from_file(path)
+                        .tap_err(|err| log::error!("failed to load plugin pack \"{}\": {err:?}", path.display()))
+                        .ok()
+                })
+                .map(|pack| (pack.name.clone(), pack))
+                .collect();
+        self.plugins =
+            self.plugin_packs
+                .values()
+                .flat_map(|plugin_pack| {
+                    plugin_pack
+                        .plugins
+                        .iter()
+                        .map(|plugin| ((
+                            plugin_pack.name.clone(),
+                            plugin.name.clone()),
+                            plugin.clone()))
+                })
+                .collect();
+    }
+}
+
+fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
     use toml::Value as TomlValue;
     use toml::Table as TomlTable;
 

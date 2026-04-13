@@ -2,7 +2,7 @@ use egui::*;
 use egui_flex::*;
 
 use crate::data::*;
-use crate::worker::*;
+use crate::engine::*;
 
 use super::*;
 use super::widget::*;
@@ -13,10 +13,9 @@ pub fn task_viewer_ui(
     view: &mut ViewContext,
     engine: &TaskEngine,
     task_id: TaskId) {
-    let worker = engine.task(task_id).expect("task_id must be valid");
-    let task = worker.task();
-    let stdout = worker.stdout();
-    let stderr = worker.stderr();
+    let task = engine.task(task_id).expect("task_id must be valid");
+    let stdout = engine.task_stdout(task_id);
+    let stderr = engine.task_stderr(task_id);
     let status = engine.task_status(task_id);
 
     assert!(flex.is_vertical(), "task_viewer_ui requires a vertical flex");
@@ -73,7 +72,8 @@ fn task_main_card(
             flex.add(item(), Label::new(""));
             flex.add_ui(item(), |ui| {
                     ui.add_enabled(
-                        status.can_start(),
+                        status != TaskStatus::Running &&
+                        status != TaskStatus::Invalid,
                         Button::new(format!("{}  Start", nf::fa::FA_PLAY)))
                 })
                 .inner
@@ -82,7 +82,7 @@ fn task_main_card(
                 .then(|| view.set_action(Action::RunTask(task.id)));
             flex.add_ui(item(), |ui| {
                     ui.add_enabled(
-                        status.can_stop(),
+                        status == TaskStatus::Running,
                         Button::new(format!("{}  Stop", nf::fa::FA_STOP)))
                 })
                 .inner
@@ -91,7 +91,7 @@ fn task_main_card(
                 .then(|| view.set_action(Action::StopTask(task.id)));
             flex.add_ui(item(), |ui| {
                     ui.add_enabled(
-                        status.can_edit(),
+                        status != TaskStatus::Running,
                         Button::new(format!("{}  Edit", nf::fa::FA_PEN)))
                 })
                 .inner

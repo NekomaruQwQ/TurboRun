@@ -1,6 +1,6 @@
 use egui::*;
 
-use crate::worker::TaskStatus;
+use crate::engine::TaskStatus;
 use super::color;
 
 pub fn code_block(source: &str) -> RichText {

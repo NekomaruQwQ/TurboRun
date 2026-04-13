@@ -3,7 +3,7 @@ use egui_flex::*;
 
 use super::color;
 use crate::engine::TaskEngine;
-use crate::worker::TaskStatus;
+use crate::engine::TaskStatus;
 
 use super::*;
 use super::widget::FlexActionButton;
@@ -13,13 +13,9 @@ pub fn dashboard_ui(
     flex: &mut FlexInstance,
     view: &mut ViewContext,
     engine: &TaskEngine) {
-    for worker in engine.tasks_sorted() {
+    for (task, status) in engine.task_view() {
         flex.add_ui(item(), |ui| {
-            task_card(
-                ui,
-                view,
-                worker.task(),
-                engine.task_status(worker.task().id));
+            task_card(ui, view, task, status);
         });
     }
 }
@@ -58,7 +54,9 @@ fn task_card_content(
             item(),
             FlexActionButton::new()
                 .icon(nf::fa::FA_PLAY)
-                .enabled(status.can_start()))
+                .enabled(
+                    status != TaskStatus::Running &&
+                    status != TaskStatus::Invalid))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
         .then(|| view.set_action(Action::RunTask(task.id)));
@@ -68,7 +66,7 @@ fn task_card_content(
             item(),
             FlexActionButton::new()
                 .icon(nf::fa::FA_STOP)
-                .enabled(status.can_stop()))
+                .enabled(status == TaskStatus::Running))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
         .then(|| view.set_action(Action::StopTask(task.id)));
@@ -90,7 +88,7 @@ fn task_card_content(
         .add(item(),
             FlexActionButton::new()
                 .icon(nf::fa::FA_PEN)
-                .enabled(status.can_edit()))
+                .enabled(status != TaskStatus::Running))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
         .then(|| view.set_navigation(Page::TaskEditor(task.clone())));

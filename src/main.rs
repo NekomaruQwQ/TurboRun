@@ -4,8 +4,6 @@ extern crate nerd_font_symbols as nf;
 
 mod util;
 mod data;
-mod plugin;
-mod worker;
 mod engine;
 mod ui;
 mod app;

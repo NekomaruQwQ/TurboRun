@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use serde::*;
 use smol_str::SmolStr;
 
-use crate::util::is_default;
+use crate::util::*;
 
 /// Represents a TurboRun configuration, loaded from and saved to a TOML file.
 ///
@@ -76,6 +76,12 @@ pub struct Task {
     /// optimize for the common case of tasks with few plugins.
     #[serde(default, skip_serializing_if = "is_default")]
     pub plugins: Vec<PluginInstance>,
+}
+
+impl Task {
+    pub fn label(&self) -> String {
+        format!("Task #{} \"{}\"", self.id, self.name)
+    }
 }
 
 /// Represents a plugin pack, which is a collection of related plugins defined
