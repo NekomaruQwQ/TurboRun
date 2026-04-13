@@ -1,296 +1,328 @@
-use std::collections::BTreeMap;
-use smol_str::SmolStr;
-
 use super::prelude::*;
 
-/// Renders the task editor page for `editor` and reports the user's intent
-/// for this frame via `page`. The caller is responsible for performing any
-/// engine-side mutations (insert / replace / remove + `save_config`) when
-/// the action is later applied.
-///
-/// `is_existing` controls the heading and whether the Delete button is shown.
-/// It is computed by the caller because we hold no mutable borrow of `engine`
-/// here and the App layer already knows the answer.
-#[expect(clippy::too_many_lines, reason = "UI code is inherently verbose")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PluginAction {
+    Remove(usize),
+    MoveUp(usize),
+    MoveDown(usize),
+}
+
 pub fn task_editor_ui(
-    ui: &mut Ui,
+    flex: &mut FlexInstance,
     view: &mut ViewContext,
-    plugin_packs: &PluginPackMap,
-    plugins: &PluginMap,
-    task: &mut Task,
-    is_existing: bool) {
-    ui.separator();
-
-    // — Action row —
-    // Validation mirrors `TaskWorker::is_valid`: we only check the inputs
-    // the user is editing here. Plugin existence is also surfaced inline via
-    // the "(missing)" label, but we don't gate Save on it — letting the user
-    // save a task pointing at a not-yet-loaded plugin is consistent with how
-    // the rest of the app handles missing plugins (mark Invalid, allow edit).
-    let valid =
-        !task.name.trim().is_empty() &&
-        !task.command.trim().is_empty();
-
-    // Copied out so the inner `with_layout` closure can reference the id
-    // without re-borrowing `task` (which the outer closure already holds
-    // mutably for `last_modified` / `clone`).
+    engine: &TaskEngine,
+    task: &mut Task) {
     let task_id = task.id;
+    let task_exist = engine.task(task_id).is_some();
+    let task_saved = engine.task(task_id) == Some(task);
 
-    ui.horizontal(|ui| {
-        if ui.add_enabled(valid, Button::new(format!("{}  Save", nf::fa::FA_FLOPPY_DISK))).clicked() {
-            view.set_action(Action::SaveTask(task.clone()));
-            view.set_navigation(Page::TaskViewer(task_id));
-        }
-
-        if ui.button(format!("{}  Cancel", nf::fa::FA_XMARK)).clicked() {
-            view.set_navigation(if is_existing {
-                Page::TaskViewer(task_id)
-            } else {
-                Page::Dashboard
-            });
-        }
-
-        if is_existing {
-            // Right-aligned two-click delete confirm. State is stashed in
-            // egui memory keyed by task id so it survives across frames but
-            // is automatically cleared the next time `Memory` is wiped (i.e.
-            // never within a session — we explicitly clear on commit).
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let confirm_id = Id::new(("edit_task_delete_confirm", task_id));
-                let armed: bool = ui
-                    .data_mut(|d| d.get_temp::<bool>(confirm_id))
-                    .unwrap_or(false);
-
-                let label = if armed {
-                    RichText::new(format!("{}  Delete?", nf::fa::FA_TRASH)).color(color::RED)
+    FlexCard::horizontal()
+        .padding(
+            Margin::same(4)
+                .tap_mut(|margin| margin.left += 4))
+        .show(flex, |flex| {
+            flex.add_ui(
+                item()
+                    .grow(1.0)
+                    .align_self_content(Align2::LEFT_CENTER),
+                |ui| ui.heading(task.name.as_str()));
+            flex.add_ui(item(), |ui| {
+                    ui.add_enabled(
+                        !task_saved,
+                        Button::new(
+                            format!("{}  Save", if !task_saved {
+                                nf::fa::FA_FLOPPY_DISK
+                            } else {
+                                nf::fa::FA_CHECK
+                            })))
+                })
+                .inner
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+                .then(|| view.set_action(Action::SaveTask(task.clone())));
+            flex.add_ui(item(), |ui| {
+                    ui.button(format!("{}  Cancel", nf::fa::FA_XMARK))
+                })
+                .inner
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+                .then(|| view.set_navigation(if task_exist {
+                    Page::TaskViewer(task_id)
                 } else {
-                    RichText::new(format!("{}  Delete", nf::fa::FA_TRASH))
-                };
-                if ui.button(label).clicked() {
-                    if armed {
-                        ui.data_mut(|d| d.remove::<bool>(confirm_id));
-                        view.set_action(Action::DeleteTask(task_id));
-                        view.set_navigation(Page::Dashboard);
-                    } else {
-                        ui.data_mut(|d| d.insert_temp(confirm_id, true));
-                    }
-                }
-            });
-        }
-    });
+                    Page::Dashboard
+                }));
 
-    ui.separator();
-
-    // — Name + Command —
-    Grid::new("edit_task_fields")
-        .num_columns(2)
-        .spacing([12.0, 4.0])
-        .show(ui, |ui| {
-            ui.label("Name");
-            ui.add(
-                TextEdit::singleline(&mut task.name)
-                    .desired_width(f32::INFINITY));
-            ui.end_row();
-
-            ui.label("Command");
-            ui.add(
-                TextEdit::multiline(&mut task.command)
-                    .code_editor()
-                    .desired_rows(4)
-                    .desired_width(f32::INFINITY));
-            ui.end_row();
+            if task_exist {
+                // Right-aligned two-click delete confirm. State is stashed in
+                // egui memory keyed by task id so it survives across frames but
+                // is automatically cleared the next time `Memory` is wiped (i.e.
+                // never within a session — we explicitly clear on commit).
+                task_delete_button_ui(flex, view, task_id);
+            }
         });
 
-    ui.separator();
+    FlexCard::vertical()
+        .padding(
+            Margin::same(4)
+                .tap_mut(|margin| margin.top += 4))
+        .show(flex, |flex| {
+            flex.add(item(), Label::new("  Task Name"));
+            flex.add_ui(
+                item()
+                    .grow(1.0)
+                    .align_self_content(Align2::LEFT_CENTER),
+                |ui| ui.add(
+                    TextEdit::singleline(&mut task.name)
+                        .desired_width(f32::INFINITY)));
+            flex.add(item(), Label::new("  Task Command"));
+            flex.add_ui(
+                item(),
+                |ui| ui.add(
+                    TextEdit::multiline(&mut task.command)
+                        .code_editor()
+                        .desired_rows(4)
+                        .desired_width(f32::INFINITY)));
+        });
 
-    // — Plugins section —
-    ui.horizontal(|ui| {
-        ui.label("Plugins");
-        if ui.small_button(format!("{}  Add plugin", nf::fa::FA_PLUS)).clicked() {
-            // `base.nu / noop` is the deliberate no-op placeholder that newly
-            // added rows start from — picked over "first available plugin"
-            // because it's the one that does nothing if the user doesn't
-            // bother to swap it.
-            task.plugins.push(PluginInstance {
-                pack: SmolStr::new_static("base"),
-                name: SmolStr::new_static("noop"),
-                enabled: false,
-                args: BTreeMap::new(),
-                flags: Vec::new(),
-            });
-        }
-    });
-
-    // Deferred row-level mutations collected during the render loop, applied
-    // after the borrow on `task.plugins` is released.
-    let mut to_remove_plugin: Option<usize> = None;
-    let mut to_move_up:       Option<usize> = None;
-    let mut to_move_down:     Option<usize> = None;
-
+    let mut plugin_action = None;
     for (idx, inst) in task.plugins.iter_mut().enumerate() {
-        // push_id keeps each row's child widget IDs stable as plugins are
-        // added/removed/reordered at other indices.
-        ui.push_id(idx, |ui| {
-            ui.group(|ui| {
-                // — Header row —
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut inst.enabled, "")
-                        .on_hover_text("Enabled");
+        flex.add_ui(item(), |ui| {
+            ui.push_id(ui.auto_id_with(idx.to_string()), |ui| {
+                FlexCard::vertical()
+                    .padding(Margin::same(4))
+                    .show_ui(ui, |flex| {
+                        task_plugin_editor_ui(flex, engine, idx, inst)
+                            .tap_some(|&action| plugin_action = Some(action));
+                    });
+            });
+        });
+    }
 
-                    ui.label(nf::fa::FA_PUZZLE_PIECE);
+    match plugin_action {
+        Some(PluginAction::Remove(i)) =>
+            task.plugins.remove(i).pipe(|_| ()),
+        Some(PluginAction::MoveUp(i)) if i > 0 =>
+            task.plugins.swap(i, i - 1),
+        Some(PluginAction::MoveDown(i)) if i + 1 < task.plugins.len() =>
+            task.plugins.swap(i, i + 1),
+        _ => (),
+    }
 
-                    let known_before =
-                        plugins.contains_key(&inst.plugin());
-                    let selected_text = if known_before {
-                        RichText::new(format!("{} / {}", inst.pack, inst.name))
+    FlexCard::horizontal().show(flex, |flex| {
+        flex.add(item(), Button::new(format!("{}  New Plugin", nf::fa::FA_PLUS)))
+            .on_hover_cursor(CursorIcon::PointingHand)
+            .clicked()
+            .then(|| task.plugins.push(PluginInstance::noop()));
+    });
+}
+
+fn task_delete_button_ui(
+    flex: &mut FlexInstance,
+    view: &mut ViewContext,
+    task_id: TaskId) {
+    let confirm_id = Id::new(("edit_task_delete_confirm", task_id));
+    let armed: bool =
+        flex.ui()
+            .data_mut(|d| d.get_temp::<bool>(confirm_id))
+            .unwrap_or(false);
+
+    let label = if armed {
+        RichText::new(format!("{}  Delete", nf::fa::FA_QUESTION)).color(color::RED)
+    } else {
+        RichText::new(format!("{}  Delete", nf::fa::FA_TRASH))
+    };
+
+    if flex.add(item(), Button::new(label))
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .clicked() {
+        if armed {
+            flex.ui().data_mut(|d| d.remove::<bool>(confirm_id));
+            view.set_action(Action::DeleteTask(task_id));
+            view.set_navigation(Page::Dashboard);
+        } else {
+            flex.ui().data_mut(|d| d.insert_temp(confirm_id, true));
+        }
+    }
+}
+
+fn task_plugin_editor_ui(
+    flex: &mut FlexInstance,
+    engine: &TaskEngine,
+    inst_id: usize,
+    inst: &mut PluginInstance)
+ -> Option<PluginAction> {
+    let mut action = None;
+
+    flex.add_flex(
+        item(),
+        Flex::horizontal()
+            .w_full()
+            .gap((4.0, 4.0).into()),
+        |flex| {
+            flex.add(
+                item(),
+                FlexActionButton::new().icon(
+                    if inst.enabled {
+                        nf::fa::FA_CHECK
                     } else {
-                        RichText::new(format!("{} / {} (missing)", inst.pack, inst.name))
-                            .color(color::ORANGE)
-                    };
+                        nf::fa::FA_XMARK
+                    }))
+                .clicked()
+                .then(|| inst.enabled = !inst.enabled);
+            flex.add_ui(
+                item().grow(1.0),
+                |ui| task_plugin_select_ui(ui, engine, inst));
+            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_ARROW_UP))
+                .on_hover_text("Move up")
+                .clicked()
+                .then(|| action = Some(PluginAction::MoveUp(inst_id)));
+            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_ARROW_DOWN))
+                .on_hover_text("Move down")
+                .clicked()
+                .then(|| action = Some(PluginAction::MoveDown(inst_id)));
+            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_TRASH))
+                .on_hover_text("Remove Plugin")
+                .clicked()
+                .then(|| action = Some(PluginAction::Remove(inst_id)));
+        });
 
-                    ComboBox::from_id_salt("plugin_select")
-                        .selected_text(selected_text)
-                        .show_ui(ui, |ui| {
-                            for (pack_name, pack) in plugin_packs.iter() {
-                                ui.label(RichText::new(pack_name.as_str()).strong().small());
-                                ui.separator();
-                                for plugin in &pack.plugins {
-                                    let selected =
-                                        inst.pack == **pack_name &&
-                                        inst.name == plugin.name;
-                                    let label = format!("{} / {}", pack_name, plugin.name);
-                                    if ui.selectable_label(selected, label).clicked() && !selected {
-                                        inst.pack = pack_name.clone();
-                                        inst.name = plugin.name.clone();
-                                        // Drop any args/flags that the new plugin no longer
-                                        // declares — silently keeping them would leak orphan
-                                        // entries into the saved config. Args/flags whose names
-                                        // exist on both sides are preserved on purpose so that
-                                        // common conventions (e.g. `--unit`) survive a swap.
-                                        inst.args.retain(|key, _| plugin.args.iter().any(|a| &a.name == key));
-                                        inst.flags.retain(|f| plugin.flags.iter().any(|pf| &pf.name == f));
-                                    }
-                                }
-                            }
+    flex.add_ui(item(), |ui| task_plugin_args_editor_ui(ui, engine, inst));
+
+    action
+}
+
+fn task_plugin_select_ui(
+    ui: &mut egui::Ui,
+    engine: &TaskEngine,
+    inst: &mut PluginInstance) {
+    let label =
+        format!("{}::{}", inst.pack, inst.name);
+    let exist =
+        engine.plugins().contains_key(&inst.plugin());
+
+    ComboBox::from_id_salt("plugin_select")
+        .selected_text(
+            if exist {
+                RichText::new(label)
+            } else {
+                RichText::new(format!("{label} (missing)"))
+                    .color(color::ORANGE)
+            })
+        .show_ui(ui, |ui| {
+            for plugin_pack in engine.plugin_packs().values() {
+                for plugin in &plugin_pack.plugins {
+                    let selected =
+                        inst.plugin() == (
+                            plugin_pack.name.clone(),
+                            plugin.name.clone());
+                    ui.add(
+                        Button::selectable(selected, "")
+                            .left_text(
+                                RichText::new(
+                                    format!("{}::{}", plugin_pack.name, plugin.name))
+                                    .monospace()))
+                        .clicked()
+                        .pipe(|clicked| clicked && !selected)
+                        .then(|| *inst = PluginInstance {
+                            pack: plugin_pack.name.clone(),
+                            name: plugin.name.clone(),
+                            enabled: inst.enabled,
+                            ..PluginInstance::default()
                         });
+                }
+            }
+        });
+}
+fn task_plugin_args_editor_ui(
+    ui: &mut egui::Ui,
+    engine: &TaskEngine,
+    inst: &mut PluginInstance) {
+    let Some(plugin) = engine.plugins().get(&inst.plugin()) else {
+        return;
+    };
 
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.small_button(nf::fa::FA_XMARK).on_hover_text("Remove plugin").clicked() {
-                            to_remove_plugin = Some(idx);
+    // Re-look-up the plugin def *after* the selector so that
+    // changing the selection takes effect this frame and we
+    // don't render args/flags that the just-pruned `inst` no
+    // longer carries.
+
+    // — Args grid —
+    if !plugin.args.is_empty() {
+        Grid::new("plugin_args")
+            .num_columns(2)
+            .spacing([12.0, 4.0])
+            .show(ui, |ui| {
+                for arg in &plugin.args {
+                    ui.horizontal(|ui| {
+                        let label_resp = ui.label(arg.name.as_str());
+                        if !arg.optional {
+                            ui.label(RichText::new("*").color(color::RED));
                         }
-                        if ui.small_button(nf::fa::FA_ARROW_DOWN).on_hover_text("Move down").clicked() {
-                            to_move_down = Some(idx);
-                        }
-                        if ui.small_button(nf::fa::FA_ARROW_UP).on_hover_text("Move up").clicked() {
-                            to_move_up = Some(idx);
+                        if !arg.description.is_empty() {
+                            let _ = label_resp.on_hover_text(&arg.description);
                         }
                     });
-                });
 
-                // Re-look-up the plugin def *after* the selector so that
-                // changing the selection takes effect this frame and we
-                // don't render args/flags that the just-pruned `inst` no
-                // longer carries.
-                let Some(plugin) = plugins.get(&inst.plugin()) else {
-                    return;
-                };
-
-                // — Args grid —
-                if !plugin.args.is_empty() {
-                    Grid::new("plugin_args")
-                        .num_columns(2)
-                        .spacing([12.0, 4.0])
-                        .show(ui, |ui| {
-                            for arg in &plugin.args {
-                                ui.horizontal(|ui| {
-                                    let label_resp = ui.label(arg.name.as_str());
-                                    if !arg.optional {
-                                        ui.label(RichText::new("*").color(color::RED));
-                                    }
-                                    if !arg.description.is_empty() {
-                                        let _ = label_resp.on_hover_text(&arg.description);
+                    // Buffered edit: bind the widget to a local
+                    // `String` (TextEdit needs `&mut dyn TextBuffer`,
+                    // which `SmolStr` does not impl) and only write
+                    // back on change. This avoids materializing empty
+                    // entries into `inst.args` for every optional arg
+                    // the user never touched, keeping the saved TOML
+                    // clean.
+                    let mut value: String =
+                        inst.args.get(&arg.name).map(<_>::to_string).unwrap_or_default();
+                    let changed = match arg.accepted_values {
+                        None => {
+                            ui.add(
+                                TextEdit::singleline(&mut value)
+                                    .desired_width(f32::INFINITY))
+                                .changed()
+                        }
+                        Some(ref accepted) => {
+                            let mut changed = false;
+                            ComboBox::from_id_salt(arg.name.as_str())
+                                .selected_text(&value)
+                                .show_ui(ui, |ui| {
+                                    for choice in accepted {
+                                        if ui.selectable_value(&mut value, choice.to_string(), choice.as_str()).changed() {
+                                            changed = true;
+                                        }
                                     }
                                 });
-
-                                // Buffered edit: bind the widget to a local
-                                // `String` (TextEdit needs `&mut dyn TextBuffer`,
-                                // which `SmolStr` does not impl) and only write
-                                // back on change. This avoids materializing empty
-                                // entries into `inst.args` for every optional arg
-                                // the user never touched, keeping the saved TOML
-                                // clean.
-                                let mut value: String =
-                                    inst.args.get(&arg.name).map(SmolStr::to_string).unwrap_or_default();
-                                let changed = match arg.accepted_values {
-                                    None => {
-                                        ui.add(
-                                            TextEdit::singleline(&mut value)
-                                                .desired_width(f32::INFINITY))
-                                            .changed()
-                                    }
-                                    Some(ref accepted) => {
-                                        let mut changed = false;
-                                        ComboBox::from_id_salt(arg.name.as_str())
-                                            .selected_text(&value)
-                                            .show_ui(ui, |ui| {
-                                                for choice in accepted {
-                                                    if ui.selectable_value(&mut value, choice.to_string(), choice.as_str()).changed() {
-                                                        changed = true;
-                                                    }
-                                                }
-                                            });
-                                        changed
-                                    }
-                                };
-                                if changed {
-                                    if value.is_empty() {
-                                        inst.args.remove(&arg.name);
-                                    } else {
-                                        inst.args.insert(arg.name.clone(), SmolStr::from(value.as_str()));
-                                    }
-                                }
-                                ui.end_row();
-                            }
-                        });
-                }
-
-                // — Flags row —
-                if !plugin.flags.is_empty() {
-                    ui.horizontal_wrapped(|ui| {
-                        for flag in &plugin.flags {
-                            let was = inst.flags.contains(&flag.name);
-                            let mut on = was;
-                            let resp = ui.checkbox(&mut on, flag.name.as_str());
-                            if !flag.description.is_empty() {
-                                let _ = resp.on_hover_text(&flag.description);
-                            }
-                            if on != was {
-                                if on {
-                                    inst.flags.push(flag.name.clone());
-                                } else {
-                                    inst.flags.retain(|f| f != &flag.name);
-                                }
-                            }
+                            changed
                         }
-                    });
+                    };
+                    if changed {
+                        if value.is_empty() {
+                            inst.args.remove(&arg.name);
+                        } else {
+                            inst.args.insert(arg.name.clone(), <_>::from(value.as_str()));
+                        }
+                    }
+                    ui.end_row();
                 }
             });
-        });
     }
 
-    // Apply deferred plugin mutations. Clicks are mutually exclusive within a
-    // single render pass so the order of these branches doesn't matter.
-    if let Some(i) = to_remove_plugin {
-        task.plugins.remove(i);
-    }
-    if let Some(i) = to_move_up
-        && i > 0
-    {
-        task.plugins.swap(i, i - 1);
-    }
-    if let Some(i) = to_move_down
-        && i + 1 < task.plugins.len()
-    {
-        task.plugins.swap(i, i + 1);
+    // — Flags row —
+    if !plugin.flags.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            for flag in &plugin.flags {
+                let was = inst.flags.contains(&flag.name);
+                let mut on = was;
+                let resp = ui.checkbox(&mut on, flag.name.as_str());
+                if !flag.description.is_empty() {
+                    let _ = resp.on_hover_text(&flag.description);
+                }
+                if on != was {
+                    if on {
+                        inst.flags.push(flag.name.clone());
+                    } else {
+                        inst.flags.retain(|f| f != &flag.name);
+                    }
+                }
+            }
+        });
     }
 }

@@ -239,6 +239,16 @@ impl PluginInstance {
     pub fn plugin(&self) -> PluginKey {
         (self.pack.clone(), self.name.clone())
     }
+
+    pub const fn noop() -> Self {
+        Self {
+            pack: SmolStr::new_static("base"),
+            name: SmolStr::new_static("noop"),
+            enabled: false,
+            args: BTreeMap::new(),
+            flags: Vec::new(),
+        }
+    }
 }
 
 impl garde::Validate for PluginInstance {

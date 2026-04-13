@@ -29,10 +29,8 @@ pub fn task_viewer_ui(
 
     // — Output cards —
     FlexCard::vertical()
-        .item(item().grow(1.0))
         .show(flex, |flex| task_output_card(flex, "Standard Output", stdout));
     FlexCard::vertical()
-        .item(item().grow(2.0))
         .show(flex, |flex| task_output_card(flex, "Standard Error", stderr));
 }
 

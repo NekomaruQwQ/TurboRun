@@ -29,16 +29,14 @@ impl FlexWidget for FlexSeparator {
 }
 
 #[derive(Setters)]
-pub struct FlexCard<'a> {
-    /// The [`FlexItem`] to use in [`FlexCard::show`].
-    pub item: FlexItem<'a>,
-
+pub struct FlexCard {
     /// Direction of the inner layout.
     ///
     /// [`FlexDirection::Vertical`] by default.
     pub direction: FlexDirection,
 
     /// Inner margin of the card.
+    ///
     /// `Margin::same(8)` for vertical and `Margin::same(4)` for horizontal
     /// by default.
     pub padding: Margin,
@@ -49,19 +47,17 @@ pub struct FlexCard<'a> {
     pub gap: Vec2,
 }
 
-impl FlexCard<'_> {
-    pub fn vertical() -> Self {
+impl FlexCard {
+    pub const fn vertical() -> Self {
         Self {
-            item: item(),
             direction: FlexDirection::Vertical,
             padding: Margin::same(8),
             gap: Vec2::new(8.0, 8.0),
         }
     }
 
-    pub fn horizontal() -> Self {
+    pub const fn horizontal() -> Self {
         Self {
-            item: item(),
             direction: FlexDirection::Horizontal,
             padding: Margin::same(4),
             gap: Vec2::new(4.0, 4.0),
@@ -69,41 +65,39 @@ impl FlexCard<'_> {
     }
 }
 
-impl FlexCard<'_> {
-    pub fn show<F>(
-        self,
-        flex: &mut FlexInstance,
-        content: F)
-     where F: FnOnce(&mut FlexInstance) {
-        let card_color =
-            flex.ui()
-                .visuals()
-                .faint_bg_color;
-        flex.add_ui(self.item, |ui| {
-            Frame::new()
-                .fill(card_color)
-                .corner_radius(6.0)
-                .inner_margin(self.padding)
-                .show(ui, |ui| match self.direction {
-                    FlexDirection::Vertical =>
-                        Flex::vertical()
-                            .w_full()
-                            .show(ui, |flex| {
-                                flex.add_flex(
-                                    item(),
-                                    Flex::vertical()
-                                        .w_full()
-                                        .align_items(FlexAlign::Start)
-                                        .gap(self.gap),
-                                    content);
-                            }),
-                    FlexDirection::Horizontal =>
-                        Flex::horizontal()
-                            .w_full()
-                            .gap(self.gap)
-                            .show(ui, content),
-                });
-        });
+impl FlexCard {
+    pub fn show<F>(self, flex: &mut FlexInstance, content: F)
+    where
+        F: FnOnce(&mut FlexInstance) {
+        flex.add_ui(item(), |ui| self.show_ui(ui, content));
+    }
+
+    pub fn show_ui<F>(self, ui: &mut Ui, content: F)
+    where
+        F: FnOnce(&mut FlexInstance) {
+        Frame::new()
+            .fill(ui.visuals().faint_bg_color)
+            .corner_radius(6.0)
+            .inner_margin(self.padding)
+            .show(ui, |ui| match self.direction {
+                FlexDirection::Vertical =>
+                    Flex::vertical()
+                        .w_full()
+                        .show(ui, |flex| {
+                            flex.add_flex(
+                                item(),
+                                Flex::vertical()
+                                    .w_full()
+                                    .align_items(FlexAlign::Start)
+                                    .gap(self.gap),
+                                content);
+                        }),
+                FlexDirection::Horizontal =>
+                    Flex::horizontal()
+                        .w_full()
+                        .gap(self.gap)
+                        .show(ui, content),
+            });
     }
 }
 

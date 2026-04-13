@@ -18,6 +18,7 @@ pub fn plugin_ui(
                 item(),
                 Button::new(
                     format!("{}  Reload Plugins", nf::fa::FA_ARROWS_ROTATE)))
+                .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
                 .then(|| view.set_action(Action::RefreshPlugins));
         });

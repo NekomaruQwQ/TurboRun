@@ -28,7 +28,7 @@ pub fn setup_style(ctx: &Context) {
         visuals.panel_fill            = color::BACKGROUND;
         visuals.window_fill           = color::BACKGROUND_ALT;
         visuals.faint_bg_color        = color::CARD;
-        visuals.extreme_bg_color      = color::INPUT;
+        visuals.extreme_bg_color      = color::BACKGROUND_INPUT;
         visuals.hyperlink_color       = color::PRIMARY;
         visuals.window_stroke         = Stroke::NONE;
         visuals.window_corner_radius  = CornerRadius::same(8);

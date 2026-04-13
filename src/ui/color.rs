@@ -1,12 +1,10 @@
-#![allow(dead_code, clippy::allow_attributes, reason = "unused colors")]
+#![allow(dead_code, clippy::allow_attributes, reason = "color palette")]
 
 use egui::Color32;
 
 // — Surface palette (Zinc) —
 
-const ZINC_950: Color32 = Color32::from_rgb(0x09, 0x09, 0x0B);
 const ZINC_900: Color32 = Color32::from_rgb(0x18, 0x18, 0x1B);
-const ZINC_850: Color32 = Color32::from_rgb(0x1E, 0x1E, 0x22);
 const ZINC_800: Color32 = Color32::from_rgb(0x27, 0x27, 0x2A);
 const ZINC_700: Color32 = Color32::from_rgb(0x3F, 0x3F, 0x46);
 const ZINC_400: Color32 = Color32::from_rgb(0xA1, 0xA1, 0xAA);
@@ -29,11 +27,11 @@ pub const PURPLE: Color32 =
 
 // — Semantic colors —
 
-/// Deepest sunken surface — text edits, scroll area gutters, etc.
-pub const INPUT: Color32 = ZINC_950;
 /// Main content background. Darker than the nav so the main canvas reads as
 /// recessed.
 pub const BACKGROUND: Color32 = ZINC_900;
+/// Input background — text edits, scroll area gutters, etc.
+pub const BACKGROUND_INPUT: Color32 = ZINC_900;
 /// Alternative background. One step lighter than [`BACKGROUND`].
 pub const BACKGROUND_ALT: Color32 = ZINC_800;
 /// Card / row surface on the main canvas. One step lighter than [`BACKGROUND`].
