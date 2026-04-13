@@ -54,24 +54,45 @@ impl FlexWidget for FlexSeparator {
     }
 }
 
-#[derive(Default)]
 #[derive(Setters)]
 pub struct FlexCard<'a> {
+    /// The [`FlexItem`] to use in [`FlexCard::show`].
     pub item: FlexItem<'a>,
 
-    /// Inner margin of the card. If `None`, a default margin of 4.0 points on
-    /// all sides is used.
-    #[setters(strip_option)]
-    pub padding: Option<Margin>,
-
-    /// Whether the card should stretch items to fill the available horizontal
-    /// space.
+    /// Direction of the inner layout.
     ///
-    /// If the content contains an embedded [`Flex`] and would like to use up
-    /// full horizontal space of the card, this must be set to `true` together
-    /// with [`Flex::w_full`] on the embedded [`Flex`].
-    #[setters(bool)]
-    pub stretch: bool,
+    /// [`FlexDirection::Vertical`] by default.
+    pub direction: FlexDirection,
+
+    /// Inner margin of the card.
+    /// `Margin::same(8)` for vertical and `Margin::same(4)` for horizontal
+    /// by default.
+    pub padding: Margin,
+
+    /// Gap between items in the inner layout.
+    ///
+    /// `(6, 6)` for vertical and `(4, 4)` for horizontal by default.
+    pub gap: Vec2,
+}
+
+impl FlexCard<'_> {
+    pub fn vertical() -> Self {
+        Self {
+            item: item(),
+            direction: FlexDirection::Vertical,
+            padding: Margin::same(8),
+            gap: Vec2::new(8.0, 8.0),
+        }
+    }
+
+    pub fn horizontal() -> Self {
+        Self {
+            item: item(),
+            direction: FlexDirection::Horizontal,
+            padding: Margin::same(4),
+            gap: Vec2::new(4.0, 4.0),
+        }
+    }
 }
 
 impl FlexCard<'_> {
@@ -88,21 +109,25 @@ impl FlexCard<'_> {
             Frame::new()
                 .fill(card_color)
                 .corner_radius(6.0)
-                .inner_margin(self.padding.unwrap_or(Margin::same(4)))
-                .show(ui, |ui| {
-                    Flex::vertical().w_full().show(ui, |flex| {
-                        if self.stretch {
-                            content(flex);
-                        } else {
-                            flex.add_flex(
-                                item(),
-                                Flex::vertical()
-                                    .w_full()
-                                    .align_items(FlexAlign::Start)
-                                    .gap((6.0, 6.0).into()),
-                                content);
-                        }
-                    });
+                .inner_margin(self.padding)
+                .show(ui, |ui| match self.direction {
+                    FlexDirection::Vertical =>
+                        Flex::vertical()
+                            .w_full()
+                            .show(ui, |flex| {
+                                flex.add_flex(
+                                    item(),
+                                    Flex::vertical()
+                                        .w_full()
+                                        .align_items(FlexAlign::Start)
+                                        .gap(self.gap),
+                                    content);
+                            }),
+                    FlexDirection::Horizontal =>
+                        Flex::horizontal()
+                            .w_full()
+                            .gap(self.gap)
+                            .show(ui, content),
                 });
         });
     }

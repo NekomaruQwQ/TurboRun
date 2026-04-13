@@ -1,5 +1,6 @@
 use egui::*;
 use egui_flex::*;
+use serde::de::value;
 
 use crate::data::*;
 use crate::engine::*;
@@ -21,31 +22,26 @@ pub fn task_viewer_ui(
     assert!(flex.is_vertical(), "task_viewer_ui requires a vertical flex");
 
     // — Main card —
-    FlexCard::default()
-        .stretch()
+    FlexCard::horizontal()
         .show(flex, |flex| task_main_card(flex, view, task, status));
 
     // — Command card (readonly) —
-    FlexCard::default()
-        .padding(Margin::symmetric(10, 8))
+    FlexCard::vertical()
         .show(flex, |flex| {
             flex.add(item(), Label::new("Command"));
             flex.add(item(), Label::new(code_block(&task.command)));
         });
 
     // — Plugins card (readonly) —
-    FlexCard::default()
-        .padding(Margin::symmetric(10, 8))
+    FlexCard::vertical()
         .show(flex, |flex| task_plugin_card(flex, &task.plugins));
 
     // — Output cards —
-    FlexCard::default()
+    FlexCard::vertical()
         .item(item().grow(1.0))
-        .padding(Margin::symmetric(10, 8))
         .show(flex, |flex| task_output_card(flex, "Standard Output", stdout));
-    FlexCard::default()
+    FlexCard::vertical()
         .item(item().grow(2.0))
-        .padding(Margin::symmetric(10, 8))
         .show(flex, |flex| task_output_card(flex, "Standard Error", stderr));
 }
 
@@ -54,51 +50,44 @@ fn task_main_card(
     view: &mut ViewContext,
     task: &Task,
     status: TaskStatus) {
-    flex.add_flex(
-        item(),
-        Flex::horizontal()
-            .w_full()
-            .gap((4.0, 4.0).into()),
-        |flex| {
-            flex.add_ui(
-                item()
-                    .grow(1.0)
-                    .align_self_content(Align2::LEFT_CENTER),
-                |ui| ui.horizontal(|ui| {
-                    ui.add_space(6.0);
-                    ui.add(Label::new(RichText::new(task.name.as_str()).heading()).wrap());
-                }));
-            flex.add(item(), Label::new(task_status_label(status).small()));
-            flex.add(item(), Label::new(""));
-            flex.add_ui(item(), |ui| {
-                    ui.add_enabled(
-                        status != TaskStatus::Running &&
-                        status != TaskStatus::Invalid,
-                        Button::new(format!("{}  Start", nf::fa::FA_PLAY)))
-                })
-                .inner
-                .on_hover_cursor(CursorIcon::PointingHand)
-                .clicked()
-                .then(|| view.set_action(Action::StartTask(task.id)));
-            flex.add_ui(item(), |ui| {
-                    ui.add_enabled(
-                        status == TaskStatus::Running,
-                        Button::new(format!("{}  Stop", nf::fa::FA_STOP)))
-                })
-                .inner
-                .on_hover_cursor(CursorIcon::PointingHand)
-                .clicked()
-                .then(|| view.set_action(Action::StopTask(task.id)));
-            flex.add_ui(item(), |ui| {
-                    ui.add_enabled(
-                        status != TaskStatus::Running,
-                        Button::new(format!("{}  Edit", nf::fa::FA_PEN)))
-                })
-                .inner
-                .on_hover_cursor(CursorIcon::PointingHand)
-                .clicked()
-                .then(|| view.set_navigation(Page::TaskEditor(task.clone())));
-        });
+    flex.add_ui(
+        item()
+            .grow(1.0)
+            .align_self_content(Align2::LEFT_CENTER),
+        |ui| ui.horizontal(|ui| {
+            ui.add_space(6.0);
+            ui.add(Label::new(RichText::new(task.name.as_str()).heading()).wrap());
+        }));
+    flex.add(item(), Label::new(task_status_label(status).small()));
+    flex.add(item(), Label::new(""));
+    flex.add_ui(item(), |ui| {
+            ui.add_enabled(
+                status != TaskStatus::Running &&
+                status != TaskStatus::Invalid,
+                Button::new(format!("{}  Start", nf::fa::FA_PLAY)))
+        })
+        .inner
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .clicked()
+        .then(|| view.set_action(Action::StartTask(task.id)));
+    flex.add_ui(item(), |ui| {
+            ui.add_enabled(
+                status == TaskStatus::Running,
+                Button::new(format!("{}  Stop", nf::fa::FA_STOP)))
+        })
+        .inner
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .clicked()
+        .then(|| view.set_action(Action::StopTask(task.id)));
+    flex.add_ui(item(), |ui| {
+            ui.add_enabled(
+                status != TaskStatus::Running,
+                Button::new(format!("{}  Edit", nf::fa::FA_PEN)))
+        })
+        .inner
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .clicked()
+        .then(|| view.set_navigation(Page::TaskEditor(task.clone())));
 }
 
 fn task_plugin_card(
@@ -109,31 +98,27 @@ fn task_plugin_card(
         ui.label(RichText::new(format!("{} used", plugins.len())).weak().small());
     }));
 
-    for inst in plugins {
-        flex.add_ui(item(), |ui| {
-            // let label = format!("{} {}", nf::fa::FA_PUZZLE_PIECE, &inst.item_name);
-            // if super::TASK_VIEWER_PLUGIN_CARD_COMPACT {
-            //     let vars =
-            //         inst.vars
-            //             .iter()
-            //             .map(|&(ref key, ref value)| format!("{key}: \"{value}\""))
-            //             .collect::<Vec<_>>()
-            //             .join(", ");
-            //     ui.horizontal(|ui| {
-            //         ui.label(RichText::new(label).monospace());
-            //         ui.label(RichText::new(format!("{{ {vars} }}")).monospace().weak());
-            //     });
-            // } else {
-            //     CollapsingHeader::new(RichText::new(label).monospace()).show(ui, |ui| {
-            //         for &(ref key, ref value) in &inst.vars {
-            //             ui.horizontal(|ui| {
-            //                 ui.label(RichText::new(key).monospace().weak());
-            //                 ui.label(RichText::new(value).monospace());
-            //             });
-            //         }
-            //     });
-            // }
-        });
+    for plugin in plugins {
+        flex.add_ui(item(), |ui| ui.vertical(|ui| {
+            ui.monospace(
+                format!(
+                    "{} {}::{}",
+                    nf::fa::FA_PUZZLE_PIECE,
+                    &plugin.pack,
+                    &plugin.name));
+            for (arg, value) in &plugin.args {
+                ui.label(
+                    RichText::new(format!("    --{arg} \"{value}\""))
+                        .small()
+                        .monospace());
+            }
+            for flag in &plugin.flags {
+                ui.label(
+                    RichText::new(format!("    --{flag}"))
+                        .small()
+                        .monospace());
+            }
+        }));
     }
 }
 
@@ -142,9 +127,13 @@ fn task_output_card(
     title: &str,
     lines: &[String]) {
     flex.add(item(), Label::new(title));
-    if !lines.is_empty() {
-        flex.add(item(), Label::new(code_block(&lines.join("\n")).weak()));
-    } else {
-        flex.add(item(), Label::new(code_block("(no output)").weak()));
-    }
+
+    // Here `Flex::add_ui` is needed to wrap the code block.
+    flex.add_ui(item(), |ui| {
+        if !lines.is_empty() {
+            ui.label(code_block(&lines.join("\n")));
+        } else {
+            ui.label(code_block("(no output)").weak());
+        }
+    });
 }

@@ -6,7 +6,7 @@ use crate::engine::TaskEngine;
 use crate::engine::TaskStatus;
 
 use super::*;
-use super::widget::FlexActionButton;
+use super::widget::*;
 use super::common::task_status_label;
 
 pub fn dashboard_ui(
@@ -14,37 +14,12 @@ pub fn dashboard_ui(
     view: &mut ViewContext,
     engine: &TaskEngine) {
     for (task, status) in engine.task_view() {
-        flex.add_ui(item(), |ui| {
-            task_card(ui, view, task, status);
-        });
+        FlexCard::horizontal()
+            .show(flex, |flex| task_card(flex, view, task, status));
     }
 }
 
 fn task_card(
-    ui: &mut Ui,
-    view: &mut ViewContext,
-    task: &Task,
-    status: TaskStatus) {
-    Frame::new()
-        .fill(color::CARD)
-        .corner_radius(6.0)
-        .inner_margin(Margin::same(4))
-        .show(ui, |ui| {
-            Flex::horizontal()
-                .id_salt(format!("dashboard_task_{}", task.id))
-                .w_full()
-                .gap([4.0, 0.0].into())
-                .show(ui, |flex| {
-                    task_card_content(
-                        flex,
-                        view,
-                        task,
-                        status);
-                })
-        });
-}
-
-fn task_card_content(
     flex: &mut FlexInstance,
     view: &mut ViewContext,
     task: &Task,
