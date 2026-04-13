@@ -40,7 +40,12 @@ pub fn plugin_ui(
 
                 for plugin in &plugin_pack.plugins {
                     flex.add_ui(item(), |ui| {
-                        ui.monospace(format!("{} {}", nf::fa::FA_PUZZLE_PIECE, plugin.name));
+                        ui.label(
+                            format!(
+                                "{}  {}::{}",
+                                nf::fa::FA_PUZZLE_PIECE,
+                                plugin_pack.name,
+                                plugin.name));
                         ui.label(RichText::new(&plugin.description).small().weak());
                     });
                 }

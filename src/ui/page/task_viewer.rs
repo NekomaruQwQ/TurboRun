@@ -89,9 +89,9 @@ fn task_plugin_card(
 
     for plugin in plugins {
         flex.add_ui(item(), |ui| ui.vertical(|ui| {
-            ui.monospace(
+            ui.label(
                 format!(
-                    "{} {}::{}",
+                    "{}  {}::{}",
                     nf::fa::FA_PUZZLE_PIECE,
                     &plugin.pack,
                     &plugin.name));

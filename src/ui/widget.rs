@@ -35,6 +35,16 @@ pub struct FlexCard {
     /// [`FlexDirection::Vertical`] by default.
     pub direction: FlexDirection,
 
+    /// Use [`FlexAlign::Stretch`] on the inner layout in vertical cards.
+    ///
+    /// This allows the card to contain inner [`Flex`] that stretches horizontally
+    /// to fill the full width of the card by setting their width to `w_full()`.
+    ///
+    /// This has no effect on horizontal cards, which always stretch items to fill
+    /// the full height of the card.
+    #[setters(bool)]
+    pub stretch: bool,
+
     /// Inner margin of the card.
     ///
     /// `Margin::same(8)` for vertical and `Margin::same(4)` for horizontal
@@ -51,6 +61,7 @@ impl FlexCard {
     pub const fn vertical() -> Self {
         Self {
             direction: FlexDirection::Vertical,
+            stretch: false,
             padding: Margin::same(8),
             gap: Vec2::new(8.0, 8.0),
         }
@@ -59,6 +70,7 @@ impl FlexCard {
     pub const fn horizontal() -> Self {
         Self {
             direction: FlexDirection::Horizontal,
+            stretch: true,
             padding: Margin::same(4),
             gap: Vec2::new(4.0, 4.0),
         }
@@ -80,18 +92,23 @@ impl FlexCard {
             .corner_radius(6.0)
             .inner_margin(self.padding)
             .show(ui, |ui| match self.direction {
+                FlexDirection::Vertical if !self.stretch =>
+                        Flex::vertical()
+                            .w_full()
+                            .show(ui, |flex| {
+                                flex.add_flex(
+                                    item(),
+                                    Flex::vertical()
+                                        .w_full()
+                                        .align_items(FlexAlign::Start)
+                                        .gap(self.gap),
+                                    content);
+                            }),
                 FlexDirection::Vertical =>
                     Flex::vertical()
                         .w_full()
-                        .show(ui, |flex| {
-                            flex.add_flex(
-                                item(),
-                                Flex::vertical()
-                                    .w_full()
-                                    .align_items(FlexAlign::Start)
-                                    .gap(self.gap),
-                                content);
-                        }),
+                        .gap(self.gap)
+                        .show(ui, content),
                 FlexDirection::Horizontal =>
                     Flex::horizontal()
                         .w_full()

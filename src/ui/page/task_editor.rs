@@ -90,6 +90,7 @@ pub fn task_editor_ui(
             ui.push_id(ui.auto_id_with(idx.to_string()), |ui| {
                 FlexCard::vertical()
                     .padding(Margin::same(4))
+                    .stretch()
                     .show_ui(ui, |flex| {
                         task_plugin_editor_ui(flex, engine, idx, inst)
                             .tap_some(|&action| plugin_action = Some(action));
@@ -108,12 +109,15 @@ pub fn task_editor_ui(
         _ => (),
     }
 
-    FlexCard::horizontal().show(flex, |flex| {
-        flex.add(item(), Button::new(format!("{}  New Plugin", nf::fa::FA_PLUS)))
-            .on_hover_cursor(CursorIcon::PointingHand)
-            .clicked()
-            .then(|| task.plugins.push(PluginInstance::noop()));
-    });
+    FlexCard::horizontal()
+        .show(flex, |flex| {
+            flex.add(
+                    item().grow(1.0),
+                    Button::new(format!("{}  New Plugin", nf::fa::FA_PLUS)))
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+                .then(|| task.plugins.push(PluginInstance::noop()));
+        });
 }
 
 fn task_delete_button_ui(
@@ -151,42 +155,70 @@ fn task_plugin_editor_ui(
     inst_id: usize,
     inst: &mut PluginInstance)
  -> Option<PluginAction> {
+    let action =
+        flex.add_flex(
+                item(),
+                Flex::horizontal()
+                    .w_full()
+                    .align_items_content(Align2::LEFT_CENTER)
+                    .gap((4.0, 4.0).into()),
+                |flex| task_plugin_header_ui(flex, engine, inst_id, inst))
+            .inner;
+
+    flex.add_ui(item(), |ui| task_plugin_detail_editor_ui(ui, engine, inst));
+
+    action
+}
+
+fn task_plugin_header_ui(
+    flex: &mut FlexInstance,
+    engine: &TaskEngine,
+    inst_id: usize,
+    inst: &mut PluginInstance)
+ -> Option<PluginAction> {
     let mut action = None;
 
-    flex.add_flex(
-        item(),
-        Flex::horizontal()
-            .w_full()
-            .gap((4.0, 4.0).into()),
-        |flex| {
-            flex.add(
-                item(),
-                FlexActionButton::new().icon(
-                    if inst.enabled {
-                        nf::fa::FA_CHECK
-                    } else {
-                        nf::fa::FA_XMARK
-                    }))
-                .clicked()
-                .then(|| inst.enabled = !inst.enabled);
-            flex.add_ui(
-                item().grow(1.0),
-                |ui| task_plugin_select_ui(ui, engine, inst));
-            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_ARROW_UP))
-                .on_hover_text("Move up")
-                .clicked()
-                .then(|| action = Some(PluginAction::MoveUp(inst_id)));
-            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_ARROW_DOWN))
-                .on_hover_text("Move down")
-                .clicked()
-                .then(|| action = Some(PluginAction::MoveDown(inst_id)));
-            flex.add(item(), FlexActionButton::new().icon(nf::fa::FA_TRASH))
-                .on_hover_text("Remove Plugin")
-                .clicked()
-                .then(|| action = Some(PluginAction::Remove(inst_id)));
-        });
+    flex.add_ui(item(), |ui| {
+        ui.add_space(4.0);
+        ui.heading(nf::fa::FA_PUZZLE_PIECE);
+    });
 
-    flex.add_ui(item(), |ui| task_plugin_args_editor_ui(ui, engine, inst));
+    flex.add_ui(item().grow(1.0), |ui| {
+        task_plugin_select_ui(ui, engine, inst);
+    });
+
+    flex.add(
+            item(),
+            Button::new(
+                if inst.enabled {
+                    RichText::new(format!("Enabled  {}", nf::fa::FA_CHECK))
+                } else {
+                    RichText::new(format!("Disabled  {}", nf::fa::FA_XMARK))
+                        .color(color::RED)
+                }))
+        .clicked()
+        .then(|| inst.enabled = !inst.enabled);
+    flex.add(
+            item(),
+            FlexActionButton::new()
+                .icon(nf::fa::FA_ARROW_UP))
+        .on_hover_text("Move up")
+        .clicked()
+        .then(|| action = Some(PluginAction::MoveUp(inst_id)));
+    flex.add(
+            item(),
+            FlexActionButton::new()
+                .icon(nf::fa::FA_ARROW_DOWN))
+        .on_hover_text("Move down")
+        .clicked()
+        .then(|| action = Some(PluginAction::MoveDown(inst_id)));
+    flex.add(
+            item(),
+            FlexActionButton::new()
+                .icon(nf::fa::FA_TRASH))
+        .on_hover_text("Remove Plugin")
+        .clicked()
+        .then(|| action = Some(PluginAction::Remove(inst_id)));
 
     action
 }
@@ -233,7 +265,11 @@ fn task_plugin_select_ui(
             }
         });
 }
-fn task_plugin_args_editor_ui(
+
+// TODO: This function was authored by Claude Code and may need a full
+// rewrite to migrate to flex-based layout. The current implementation
+//  is a quick port of the old `&mut egui::Ui` based layout.
+fn task_plugin_detail_editor_ui(
     ui: &mut egui::Ui,
     engine: &TaskEngine,
     inst: &mut PluginInstance) {
@@ -254,6 +290,7 @@ fn task_plugin_args_editor_ui(
             .show(ui, |ui| {
                 for arg in &plugin.args {
                     ui.horizontal(|ui| {
+                        ui.add_space(4.0);
                         let label_resp = ui.label(arg.name.as_str());
                         if !arg.optional {
                             ui.label(RichText::new("*").color(color::RED));
@@ -309,6 +346,7 @@ fn task_plugin_args_editor_ui(
     if !plugin.flags.is_empty() {
         ui.horizontal_wrapped(|ui| {
             for flag in &plugin.flags {
+                ui.add_space(4.0);
                 let was = inst.flags.contains(&flag.name);
                 let mut on = was;
                 let resp = ui.checkbox(&mut on, flag.name.as_str());
