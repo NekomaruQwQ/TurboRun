@@ -8,6 +8,26 @@ use std::time::Instant;
 
 use crate::prelude::*;
 
+/// Creates a job object for a spawned child process so that killing the task
+/// terminates the entire descendant tree, not just the direct child.
+///
+/// Returns `None` (with a warning log) if job creation or assignment fails;
+/// the caller falls back to direct `child.kill()` in that case.
+fn create_job_object_for_child(child: &Child) -> anyhow::Result<win32job::Job> {
+    use std::os::windows::io::AsRawHandle as _;
+    use win32job::*;
+
+    let job_object =
+        ExtendedLimitInfo::new()
+            .tap_mut(|info| { info.limit_kill_on_job_close(); })
+            .pipe(|info| Job::create_with_limit_info(&info))
+            .context("failed to create job object")?;
+    job_object
+        .assign_process(child.as_raw_handle() as isize)
+        .context("failed to assign child to job object")?;
+    job_object.pipe(Ok)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TaskStatus {
     Invalid,
@@ -20,9 +40,19 @@ pub enum TaskStatus {
 
 pub enum TaskProcess {
     Running {
+        /// The active child process.
         child: Child,
+
+        /// Per-task job object that groups the child and all its descendants.
+        /// Dropping this handle with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
+        /// terminates the entire process tree.
+        ///
+        /// [`Option`] is used to allow taking the job for killing without dropping
+        /// the entire [`TaskProcess`]. This also allows detecting if the task has
+        /// already been killed from call to [`TaskProcess::kill()`].
+        job_object: Option<win32job::Job>,
+
         start_time: Instant,
-        killed: bool,
         stdout: Vec<String>,
         stderr: Vec<String>,
         stdout_reader: PipeReader,
@@ -47,18 +77,31 @@ impl TaskProcess {
         }
     }
 
-    pub fn from_child(mut child: Child) -> Self {
-        let stdout = child.stdout.take().expect("failed to take stdout");
-        let stderr = child.stderr.take().expect("failed to take stderr");
-        Self::Running {
+    pub fn from_child(mut child: Child) -> anyhow::Result<Self> {
+        // Create a per-task job object so killing the task terminates the
+        // entire process tree, not just the direct child.
+        let job_object =
+            create_job_object_for_child(&child)?
+                .pipe(Some);
+        let stdout =
+            child
+                .stdout
+                .take()
+                .context("failed to take stdout from child")?;
+        let stderr =
+            child
+                .stderr
+                .take()
+                .context("failed to take stderr from child")?;
+        Ok(Self::Running {
             child,
+            job_object,
             start_time: Instant::now(),
-            killed: false,
             stdout: Vec::new(),
             stderr: Vec::new(),
             stdout_reader: PipeReader::new(stdout),
             stderr_reader: PipeReader::new(stderr),
-        }
+        })
     }
 
     pub fn from_script(script: &str) -> anyhow::Result<Self> {
@@ -70,7 +113,7 @@ impl TaskProcess {
             .stderr(Stdio::piped())
             .spawn()
             .context("Command::spawn failed")
-            .map(Self::from_child)
+            .and_then(Self::from_child)
     }
 
     pub const fn stdout(&self) -> &Vec<String> {
@@ -102,12 +145,13 @@ impl TaskProcess {
 
     pub fn kill(&mut self) -> anyhow::Result<()> {
         match self {
-            &mut Self::Running { ref mut child, ref mut killed, .. } => {
-                if *killed {
-                    anyhow::bail!("task has already been killed");
-                }
-                child.kill()?;
-                *killed = true;
+            &mut Self::Running { ref mut job_object, .. } => {
+                // Dropping the job with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                // terminates all processes in the tree.
+                job_object
+                    .take()
+                    .context("task has already been killed")?
+                    .pipe(drop);
             },
             &mut Self::Stopped { .. } =>
                 anyhow::bail!("task is not running"),
@@ -134,8 +178,8 @@ impl TaskProcess {
         match child.try_wait() {
             Ok(Some(status)) => {
                 let Self::Running {
+                    job_object,
                     start_time,
-                    killed,
                     mut stdout,
                     mut stderr,
                     stdout_reader,
@@ -151,9 +195,9 @@ impl TaskProcess {
                 stderr_reader.finish(&mut stderr);
 
                 let exit_code =
-                    (!killed)
-                        .then_some(status.code())
-                        .flatten();
+                    job_object
+                        .as_ref()
+                        .and_then(|_| status.code());
                 let elapsed_ms =
                     start_time
                         .elapsed()
@@ -225,7 +269,7 @@ impl PipeReader {
         let _ =
             self.thread
                 .take()
-                .expect("PipeReader::finish can be called at most once")
+                .expect("@assert PipeReader::finish can be called at most once")
                 .join();
         self.read_into(buf);
     }

@@ -15,7 +15,7 @@ impl super::TaskEngine {
                 .into_iter()
                 .filter_map(|path| {
                     load_plugin_pack_from_file(path)
-                        .tap_err(|err| log::error!("failed to load plugin pack \"{}\": {err:?}", path.display()))
+                        .tap_err(|err| log::error!("failed to load plugin pack from \"{}\": {err:?}", path.display()))
                         .ok()
                 })
                 .map(|pack| (pack.name.clone(), pack))
@@ -39,6 +39,8 @@ impl super::TaskEngine {
 fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
     use toml::Value as TomlValue;
     use toml::Table as TomlTable;
+
+    log::info!("loading plugin pack from \"{}\"", path.display());
 
     let pack_name: SmolStr =
         path.file_stem()

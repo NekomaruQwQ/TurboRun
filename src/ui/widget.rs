@@ -6,6 +6,12 @@ use derive_setters::Setters;
 
 pub struct FlexSpace(pub f32);
 
+impl FlexSpace {
+    pub fn fill(flex: &mut FlexInstance) {
+        flex.add(item().grow(1.0), Self(0.0));
+    }
+}
+
 impl FlexWidget for FlexSpace {
     type Response = ();
 

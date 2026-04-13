@@ -27,7 +27,6 @@ impl super::TaskEngine {
                 .into_iter()
                 .map(|task| (task.id, task))
                 .collect();
-        log::info!("loaded config tasks: {:?}", &self.tasks);
         Ok(())
     }
 
