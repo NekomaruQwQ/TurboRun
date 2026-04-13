@@ -14,14 +14,14 @@ export def env [command: closure, --key: string, --value: string]: nothing -> no
 }
 
 #? [[plugins]]
-#? name = "loop"
-#? description = "Restarts the command after an interval."
+#? name = "repeat"
+#? description = "Repeats the command after an interval."
 #?
 #? [[plugins.args]]
 #? name = "interval"
 #? optional = true
 #? description = "Interval in milliseconds between each execution of the command. Default is 1000ms."
-export def loop [command: closure, --interval: string = "1000"]: nothing -> nothing {
+export def repeat [command: closure, --interval: string = "1000"]: nothing -> nothing {
     let interval = $"($interval)ms" | into duration
     loop {
         do $command
