@@ -15,10 +15,10 @@ pub fn task_status_label(status: TaskStatus) -> RichText {
             RichText::new("Invalid").color(color::ORANGE),
         TaskStatus::None =>
             RichText::new(""),
-        TaskStatus::Stopped =>
-            RichText::new("Stopped").weak(),
         TaskStatus::Running =>
             RichText::new("Running").color(color::BLUE),
+        TaskStatus::Stopped =>
+            RichText::new("Stopped").weak(),
         TaskStatus::Success =>
             RichText::new("Success").color(color::GREEN),
         TaskStatus::Failure =>

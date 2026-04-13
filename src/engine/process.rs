@@ -1,9 +1,9 @@
 use std::io::prelude::*;
 use std::io;
+use std::mem;
 use std::process::*;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 use std::time::Instant;
 
 use crate::prelude::*;
@@ -18,33 +18,39 @@ pub enum TaskStatus {
     Failure,
 }
 
-pub struct TaskProcess {
-    child: Child,
-    start_time: Instant,
-    killed: bool,
-    stdout: Vec<String>,
-    stderr: Vec<String>,
-    stdout_reader: PipeReader,
-    stderr_reader: PipeReader,
-}
-
-pub struct TaskResult {
-    /// The elapsed time from process start to exit.
-    pub elapsed: Duration,
-    /// The exit code of the process, or [`None`] if the process was killed or
-    /// terminated by a signal.
-    pub exit_code: Option<i32>,
-    /// The captured stdout lines from the process.
-    pub stdout: Vec<String>,
-    /// The captured stderr lines from the process.
-    pub stderr: Vec<String>,
+pub enum TaskProcess {
+    Running {
+        child: Child,
+        start_time: Instant,
+        killed: bool,
+        stdout: Vec<String>,
+        stderr: Vec<String>,
+        stdout_reader: PipeReader,
+        stderr_reader: PipeReader,
+    },
+    Stopped {
+        /// The exit code of the process as is reported by [`ExitStatus::code()`].
+        exit_code: Option<i32>,
+        /// The captured stdout lines from the process.
+        stdout: Vec<String>,
+        /// The captured stderr lines from the process.
+        stderr: Vec<String>,
+    },
 }
 
 impl TaskProcess {
-    pub fn new(mut child: Child) -> Self {
+    const fn default() -> Self {
+        Self::Stopped {
+            exit_code: None,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }
+    }
+
+    pub fn from_child(mut child: Child) -> Self {
         let stdout = child.stdout.take().expect("failed to take stdout");
         let stderr = child.stderr.take().expect("failed to take stderr");
-        Self {
+        Self::Running {
             child,
             start_time: Instant::now(),
             killed: false,
@@ -55,7 +61,7 @@ impl TaskProcess {
         }
     }
 
-    pub fn run_script(script: &str) -> anyhow::Result<Self> {
+    pub fn from_script(script: &str) -> anyhow::Result<Self> {
         Command::new("nu")
             .arg("-l")
             .arg("-c")
@@ -64,78 +70,114 @@ impl TaskProcess {
             .stderr(Stdio::piped())
             .spawn()
             .context("Command::spawn failed")
-            .map(Self::new)
+            .map(Self::from_child)
     }
 
     pub const fn stdout(&self) -> &Vec<String> {
-        &self.stdout
+        match self {
+            &Self::Running { ref stdout, .. } |
+            &Self::Stopped { ref stdout, .. } => stdout,
+        }
     }
 
     pub const fn stderr(&self) -> &Vec<String> {
-        &self.stderr
+        match self {
+            &Self::Running { ref stderr, .. } |
+            &Self::Stopped { ref stderr, .. } => stderr,
+        }
+    }
+
+    pub const fn status(&self) -> TaskStatus {
+        match self {
+            &Self::Running { .. } =>
+                TaskStatus::Running,
+            &Self::Stopped { exit_code: Some(0), .. } =>
+                TaskStatus::Success,
+            &Self::Stopped { exit_code: Some(_), .. } =>
+                TaskStatus::Failure,
+            &Self::Stopped { exit_code: None, .. } =>
+                TaskStatus::Stopped,
+        }
     }
 
     pub fn kill(&mut self) -> anyhow::Result<()> {
-        self.child.kill()?;
-        self.killed = true;
+        match self {
+            &mut Self::Running { ref mut child, ref mut killed, .. } => {
+                if *killed {
+                    anyhow::bail!("task has already been killed");
+                }
+                child.kill()?;
+                *killed = true;
+            },
+            &mut Self::Stopped { .. } =>
+                anyhow::bail!("task is not running"),
+        }
         Ok(())
     }
 
-    pub fn update(proc: &mut Option<Self>, label: &str) -> Option<TaskResult> {
-        let proc_mut = proc;
-        let proc = proc_mut.as_mut()?;
+    pub fn update(&mut self, label: &str) {
+        let &mut Self::Running {
+            ref mut child,
+            ref mut stdout,
+            ref mut stderr,
+            ref mut stdout_reader,
+            ref mut stderr_reader,
+            ..
+        } = self else {
+            return;
+        };
 
         // Drain channels every tick for live output streaming.
-        proc.stdout_reader.read_into(&mut proc.stdout);
-        proc.stderr_reader.read_into(&mut proc.stderr);
+        stdout_reader.read_into(stdout);
+        stderr_reader.read_into(stderr);
 
-        match proc.child.try_wait() {
+        match child.try_wait() {
             Ok(Some(status)) => {
-                let mut proc = {
-                    #[expect(clippy::unwrap_in_result, reason = "guaranteed by type invariant")] {
-                        proc_mut.take().unwrap()
-                    }
+                let Self::Running {
+                    start_time,
+                    killed,
+                    mut stdout,
+                    mut stderr,
+                    stdout_reader,
+                    stderr_reader,
+                    ..
+                } = mem::replace(self, Self::default()) else {
+                    panic!("@unreachable guaranteed by the outer pattern match");
                 };
 
                 // Join threads (guarantees all lines are sent), then drain
                 // any remaining lines that arrived after the last read_into.
-                proc.stdout_reader.finish(&mut proc.stdout);
-                proc.stderr_reader.finish(&mut proc.stderr);
+                stdout_reader.finish(&mut stdout);
+                stderr_reader.finish(&mut stderr);
 
-                let result = TaskResult {
-                    elapsed: proc.start_time.elapsed(),
-                    exit_code:
-                        (!proc.killed)
-                            .then_some(status.code())
-                            .flatten(),
-                    stdout: proc.stdout,
-                    stderr: proc.stderr,
-                };
+                let exit_code =
+                    (!killed)
+                        .then_some(status.code())
+                        .flatten();
+                let elapsed_ms =
+                    start_time
+                        .elapsed()
+                        .as_millis();
 
-                let elapsed_ms = result.elapsed.as_millis();
-                if proc.killed {
-                    log::info!("{label} killed after {elapsed_ms} ms");
+                if let Some(exit_code) = exit_code {
+                    log::info!("{label} exited with code {exit_code} after {elapsed_ms} ms");
                 } else {
-                    log::info!(
-                        "{label} exited with status {:?} after {elapsed_ms} ms",
-                        result
-                            .exit_code
-                            .map(|code| code.to_string())
-                            .unwrap_or_else(|| String::from("<unknown>")));
+                    log::info!("{label} killed after {elapsed_ms} ms");
                 }
 
-                Some(result)
+                *self = Self::Stopped {
+                    exit_code,
+                    stdout,
+                    stderr,
+                };
             },
-            Ok(None) => None,
-            Err(err) => {
-                eprintln!("failed to check process status: {err}");
-                None
-            },
+            Ok(None) => (),
+            Err(err) => log::error!("failed to check process status: {err}"),
         }
     }
 }
 
-struct PipeReader {
+pub struct PipeReader {
     thread: Option<thread::JoinHandle<()>>,
     rx: mpsc::Receiver<String>,
 }
@@ -180,9 +222,11 @@ impl PipeReader {
     /// This guarantees no data loss: the join ensures the thread has pushed
     /// all lines, and the drain empties the channel before it's dropped.
     fn finish(mut self, buf: &mut Vec<String>) {
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        let _ =
+            self.thread
+                .take()
+                .expect("PipeReader::finish can be called at most once")
+                .join();
         self.read_into(buf);
     }
 }

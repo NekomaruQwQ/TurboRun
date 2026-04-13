@@ -42,7 +42,7 @@ fn load_plugin_pack_from_file(path: &Path) -> anyhow::Result<PluginPack> {
 
     let pack_name: SmolStr =
         path.file_stem()
-            .expect("@logicError unexpected path")
+            .context("file name is missing")?
             .to_str()
             .context("file name is not valid utf-8")?
             .into();
@@ -102,7 +102,8 @@ pub fn apply_plugins(task: &Task, plugin_packs: &PluginPackMap)
         .collect::<anyhow::Result<Vec<_>>>()?
         .into_iter()
         .map(|plugin| {
-            plugin.path
+            plugin
+                .path
                 .to_str()
                 .expect("@logicError invalid plugin_dir")
                 .replace('\\', "/")

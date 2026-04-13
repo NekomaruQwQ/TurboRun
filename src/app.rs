@@ -62,13 +62,15 @@ impl App {
                 self.engine.load_plugin_packs(
                     self.args.plugin_pack.iter().map(Path::new));
             },
-            ui::Action::RunTask(id) => {
-                if let Err(err) = self.engine.run_task(id) {
+            ui::Action::StartTask(id) => {
+                if let Err(err) = self.engine.start_task(id) {
                     log::error!("failed to start task {id}: {err:?}");
                 }
             },
             ui::Action::StopTask(id) => {
-                self.engine.stop_task(id);
+                if let Err(err) = self.engine.stop_task(id) {
+                    log::error!("failed to stop task {id}: {err:?}");
+                }
             },
             ui::Action::SaveTask(task) => {
                 self.engine.update_or_insert_task(task);

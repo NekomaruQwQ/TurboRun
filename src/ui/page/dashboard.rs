@@ -49,7 +49,7 @@ fn task_card_content(
     view: &mut ViewContext,
     task: &Task,
     status: TaskStatus) {
-    // Run — disabled while already running or invalid.
+    // Start — disabled while already running or invalid.
     flex.add(
             item(),
             FlexActionButton::new()
@@ -59,7 +59,7 @@ fn task_card_content(
                     status != TaskStatus::Invalid))
         .on_hover_cursor(CursorIcon::PointingHand)
         .clicked()
-        .then(|| view.set_action(Action::RunTask(task.id)));
+        .then(|| view.set_action(Action::StartTask(task.id)));
 
     // Stop — disabled when not running.
     flex.add(

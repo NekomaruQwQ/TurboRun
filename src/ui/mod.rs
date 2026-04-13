@@ -39,7 +39,7 @@ pub enum Page {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Action {
     RefreshPlugins,
-    RunTask(TaskId),
+    StartTask(TaskId),
     StopTask(TaskId),
     SaveTask(Task),
     DeleteTask(TaskId),

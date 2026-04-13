@@ -79,7 +79,7 @@ fn task_main_card(
                 .inner
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
-                .then(|| view.set_action(Action::RunTask(task.id)));
+                .then(|| view.set_action(Action::StartTask(task.id)));
             flex.add_ui(item(), |ui| {
                     ui.add_enabled(
                         status == TaskStatus::Running,
