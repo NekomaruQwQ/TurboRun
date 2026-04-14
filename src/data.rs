@@ -228,7 +228,7 @@ pub struct PluginInstance {
 
     /// Flags enabled for this plugin instance.
     #[serde(default, skip_serializing_if = "is_default")]
-    pub flags: Vec<SmolStr>,
+    pub flags: BTreeSet<SmolStr>,
 }
 
 pub type PluginKey = (SmolStr, SmolStr);
@@ -246,7 +246,7 @@ impl PluginInstance {
             name: SmolStr::new_static("noop"),
             enabled: false,
             args: BTreeMap::new(),
-            flags: Vec::new(),
+            flags: BTreeSet::new(),
         }
     }
 }

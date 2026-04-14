@@ -90,6 +90,7 @@ pub fn task_editor_ui(
             ui.push_id(ui.auto_id_with(idx.to_string()), |ui| {
                 FlexCard::vertical()
                     .padding(Margin::same(4))
+                    .gap((4.0, 4.0).into())
                     .stretch()
                     .show_ui(ui, |flex| {
                         task_plugin_editor_ui(flex, engine, idx, inst)
@@ -120,6 +121,9 @@ pub fn task_editor_ui(
         });
 }
 
+// TODO: This function was authored by Claude Code and may need some
+// polishing on its behavior. The current implementation is a quick
+// port of the old `egui::Ui::data_mut` based logic.
 fn task_delete_button_ui(
     flex: &mut FlexInstance,
     view: &mut ViewContext,
@@ -165,7 +169,49 @@ fn task_plugin_editor_ui(
                 |flex| task_plugin_header_ui(flex, engine, inst_id, inst))
             .inner;
 
-    flex.add_ui(item(), |ui| task_plugin_detail_editor_ui(ui, engine, inst));
+    if let Some(plugin) = engine.plugins().get(&inst.plugin()) && !(
+        plugin.args.is_empty() &&
+        plugin.flags.is_empty()) {
+        flex.add_ui(item(), |ui| {
+            Grid::new("plugin_args")
+                .num_columns(3)
+                .min_col_width(0.0)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    for flag in &plugin.flags {
+                        task_plugin_label_ui(
+                            ui,
+                            &flag.name,
+                            false,
+                            &flag.description);
+
+                        let mut selected = inst.flags.contains(&flag.name);
+                        ui
+                            .checkbox(&mut selected, "")
+                            .on_hover_cursor(CursorIcon::PointingHand)
+                            .clicked()
+                            .then(|| {
+                                if selected {
+                                    inst.flags.remove(&flag.name);
+                                } else {
+                                    inst.flags.insert(flag.name.clone());
+                                }
+                            });
+                        ui.end_row();
+                    }
+
+                    for arg in &plugin.args {
+                        task_plugin_label_ui(
+                            ui,
+                            &arg.name,
+                            !arg.optional,
+                            &arg.description);
+                        task_plugin_args_editor_ui(ui, arg, inst);
+                        ui.end_row();
+                    }
+                });
+        });
+    }
 
     action
 }
@@ -266,101 +312,85 @@ fn task_plugin_select_ui(
         });
 }
 
+fn task_plugin_label_ui(
+    ui: &mut Ui,
+    name: &str,
+    required: bool,
+    description: &str) {
+    ui.horizontal(|ui| {
+        ui.style_mut().spacing.item_spacing.x = 2.0;
+        ui.add_space(4.0);
+        ui.label(RichText::new(format!("--{name}")).monospace());
+        if required {
+            ui.label(RichText::new("*").color(color::RED));
+        }
+    });
+
+    if !description.is_empty() {
+        ui
+            .label(RichText::new(nf::oct::OCT_INFO).small().weak())
+            .on_hover_text(description);
+    } else {
+        ui.label("");
+    };
+}
+
 // TODO: This function was authored by Claude Code and may need a full
 // rewrite to migrate to flex-based layout. The current implementation
 //  is a quick port of the old `&mut egui::Ui` based layout.
-fn task_plugin_detail_editor_ui(
+fn task_plugin_args_editor_ui(
     ui: &mut egui::Ui,
-    engine: &TaskEngine,
+    arg: &PluginArg,
     inst: &mut PluginInstance) {
-    let Some(plugin) = engine.plugins().get(&inst.plugin()) else {
-        return;
-    };
-
-    // Re-look-up the plugin def *after* the selector so that
-    // changing the selection takes effect this frame and we
-    // don't render args/flags that the just-pruned `inst` no
-    // longer carries.
-
-    // — Args grid —
-    if !plugin.args.is_empty() {
-        Grid::new("plugin_args")
-            .num_columns(2)
-            .spacing([12.0, 4.0])
-            .show(ui, |ui| {
-                for arg in &plugin.args {
-                    ui.horizontal(|ui| {
-                        ui.add_space(4.0);
-                        let label_resp = ui.label(arg.name.as_str());
-                        if !arg.optional {
-                            ui.label(RichText::new("*").color(color::RED));
-                        }
-                        if !arg.description.is_empty() {
-                            let _ = label_resp.on_hover_text(&arg.description);
-                        }
-                    });
-
-                    // Buffered edit: bind the widget to a local
-                    // `String` (TextEdit needs `&mut dyn TextBuffer`,
-                    // which `SmolStr` does not impl) and only write
-                    // back on change. This avoids materializing empty
-                    // entries into `inst.args` for every optional arg
-                    // the user never touched, keeping the saved TOML
-                    // clean.
-                    let mut value: String =
-                        inst.args.get(&arg.name).map(<_>::to_string).unwrap_or_default();
-                    let changed = match arg.accepted_values {
-                        None => {
-                            ui.add(
-                                TextEdit::singleline(&mut value)
-                                    .desired_width(f32::INFINITY))
-                                .changed()
-                        }
-                        Some(ref accepted) => {
-                            let mut changed = false;
-                            ComboBox::from_id_salt(arg.name.as_str())
-                                .selected_text(&value)
-                                .show_ui(ui, |ui| {
-                                    for choice in accepted {
-                                        if ui.selectable_value(&mut value, choice.to_string(), choice.as_str()).changed() {
-                                            changed = true;
-                                        }
-                                    }
-                                });
-                            changed
-                        }
-                    };
-                    if changed {
-                        if value.is_empty() {
-                            inst.args.remove(&arg.name);
-                        } else {
-                            inst.args.insert(arg.name.clone(), <_>::from(value.as_str()));
-                        }
-                    }
-                    ui.end_row();
-                }
-            });
-    }
-
-    // — Flags row —
-    if !plugin.flags.is_empty() {
-        ui.horizontal_wrapped(|ui| {
-            for flag in &plugin.flags {
-                ui.add_space(4.0);
-                let was = inst.flags.contains(&flag.name);
-                let mut on = was;
-                let resp = ui.checkbox(&mut on, flag.name.as_str());
-                if !flag.description.is_empty() {
-                    let _ = resp.on_hover_text(&flag.description);
-                }
-                if on != was {
-                    if on {
-                        inst.flags.push(flag.name.clone());
+    // Buffered edit: bind the widget to a local
+    // `String` (TextEdit needs `&mut dyn TextBuffer`,
+    // which `SmolStr` does not impl) and only write
+    // back on change. This avoids materializing empty
+    // entries into `inst.args` for every optional arg
+    // the user never touched, keeping the saved TOML
+    // clean.
+    let mut value: String =
+        inst.args.get(&arg.name).map(<_>::to_string).unwrap_or_default();
+    let changed = match arg.accepted_values {
+        None => {
+            ui.add(
+                TextEdit::singleline(&mut value)
+                    .desired_width(f32::INFINITY))
+                .changed()
+        }
+        Some(ref accepted) => {
+            let mut changed = false;
+            ComboBox::from_id_salt(arg.name.as_str())
+                .selected_text(
+                    if !value.is_empty() {
+                        RichText::new(value.clone())
                     } else {
-                        inst.flags.retain(|f| f != &flag.name);
+                        RichText::new("(none)").monospace().weak()
+                    })
+                .show_ui(ui, |ui| {
+                    if arg.optional {
+                        ui
+                            .selectable_value(
+                                &mut value,
+                                String::new(),
+                                RichText::new("(none)").monospace().weak())
+                            .changed()
+                            .then(|| changed = true);
                     }
-                }
-            }
-        });
+                    for choice in accepted {
+                        if ui.selectable_value(&mut value, choice.to_string(), choice.as_str()).changed() {
+                            changed = true;
+                        }
+                    }
+                });
+            changed
+        }
+    };
+    if changed {
+        if value.is_empty() {
+            inst.args.remove(&arg.name);
+        } else {
+            inst.args.insert(arg.name.clone(), <_>::from(value.as_str()));
+        }
     }
 }

@@ -93,17 +93,17 @@ impl FlexCard {
             .inner_margin(self.padding)
             .show(ui, |ui| match self.direction {
                 FlexDirection::Vertical if !self.stretch =>
-                        Flex::vertical()
-                            .w_full()
-                            .show(ui, |flex| {
-                                flex.add_flex(
-                                    item(),
-                                    Flex::vertical()
-                                        .w_full()
-                                        .align_items(FlexAlign::Start)
-                                        .gap(self.gap),
-                                    content);
-                            }),
+                    Flex::vertical()
+                        .w_full()
+                        .show(ui, |flex| {
+                            flex.add_flex(
+                                item(),
+                                Flex::vertical()
+                                    .w_full()
+                                    .align_items(FlexAlign::Start)
+                                    .gap(self.gap),
+                                content);
+                        }),
                 FlexDirection::Vertical =>
                     Flex::vertical()
                         .w_full()
